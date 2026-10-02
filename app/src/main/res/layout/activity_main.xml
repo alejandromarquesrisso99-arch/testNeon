@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <com.district9.neonsteps.ui.scene.SceneView
+        android:id="@+id/scene"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <LinearLayout
+        android:id="@+id/overlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <com.district9.neonsteps.ui.hud.HeaderView
+            android:id="@+id/header"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingStart="16dp"
+            android:paddingTop="22dp"
+            android:paddingEnd="16dp" />
+
+        <Space
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <com.district9.neonsteps.ui.hud.HudPanelView
+            android:id="@+id/hud"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_marginTop="12dp"
+            android:layout_marginEnd="16dp"
+            android:layout_marginBottom="12dp"
+            android:orientation="horizontal">
+
+            <com.district9.neonsteps.ui.hud.NeonButtonView
+                android:id="@+id/btn_goal"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="10dp"
+                android:layout_weight="1" />
+
+            <com.district9.neonsteps.ui.hud.NeonButtonView
+                android:id="@+id/btn_history"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="10dp"
+                android:layout_weight="1" />
+
+            <com.district9.neonsteps.ui.hud.NeonButtonView
+                android:id="@+id/btn_rain"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1" />
+        </LinearLayout>
+
+        <com.district9.neonsteps.ui.hud.TickerView
+            android:id="@+id/ticker"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+    </LinearLayout>
+
+    <com.district9.neonsteps.ui.hud.HistoryView
+        android:id="@+id/history"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <com.district9.neonsteps.ui.hud.FxOverlayView
+        android:id="@+id/fx"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+</FrameLayout>

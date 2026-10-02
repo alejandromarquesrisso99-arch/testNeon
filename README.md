@@ -49,7 +49,8 @@ compilada en otro ordenador, desinstala antes la anterior.
   vuelve a fallar, claro.
 - **Koi dorado**: toca 3 veces el koi holográfico. Se escapa del haz de la Torre 61, se vuelve
   dorado y vuela por todo el cielo durante un minuto dejando purpurina («SEÑAL PERDIDA»).
-- **Apagón**: mantén pulsado el número de pasos. District 9 se queda a oscuras (solo brillan la
+- **Apagón**: mantén pulsado el número de pasos (el móvil vibra mientras se va la luz).
+  District 9 se queda a oscuras (solo brillan la
   lluvia, los paraguas y tus pasos) y luego vuelve la luz a trozos, con los neones arrancando
   a trompicones.
 

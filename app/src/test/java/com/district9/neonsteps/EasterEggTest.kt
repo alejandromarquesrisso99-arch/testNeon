@@ -4,6 +4,8 @@ import android.Manifest
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.SystemClock
+import android.os.VibrationAttributes
+import android.os.VibratorManager
 import android.view.MotionEvent
 import android.view.View
 import com.district9.neonsteps.data.StepRepository
@@ -111,6 +113,13 @@ class EasterEggTest {
         val y = header.top + header.height * 0.45f
         touch(MotionEvent.ACTION_DOWN, x, y)
         ShadowLooper.idleMainLooper(700, TimeUnit.MILLISECONDS)
+        // The phone buzzes as the grid dies, as media vibration (not muted by "vibrate on touch").
+        val vibrator = shadowOf(activity.getSystemService(VibratorManager::class.java).defaultVibrator)
+        assertTrue(vibrator.isVibrating)
+        assertEquals(
+            VibrationAttributes.USAGE_MEDIA,
+            (vibrator.vibrationAttributesFromLastVibration as VibrationAttributes).usage,
+        )
         touch(MotionEvent.ACTION_UP, x, y)
         assertEquals(listOf(EasterEgg.BLACKOUT), found)
         advance(2.5f)

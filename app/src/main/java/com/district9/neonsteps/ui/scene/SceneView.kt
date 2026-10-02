@@ -3,6 +3,11 @@ package com.district9.neonsteps.ui.scene
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.RectF
+import android.os.Build
+import android.os.VibrationAttributes
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.util.AttributeSet
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
@@ -51,7 +56,7 @@ class SceneView @JvmOverloads constructor(
         val s = scene ?: return@Runnable
         if (dragging || s.blackoutRunning) return@Runnable
         longPressFired = true
-        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        buzzBlackout()
         s.blackout()
         onEasterEgg?.invoke(EasterEgg.BLACKOUT)
     }
@@ -84,6 +89,34 @@ class SceneView @JvmOverloads constructor(
         activity = value
         scene?.activity = value
     }
+
+    /**
+     * The grid dying, felt in the hand: a heavy thunk, two sputters and a fading hum, timed to
+     * the 0.8 s brownout. It's part of the show, like a game's rumble, so it's sent as media
+     * vibration: the system's "vibrate on touch" switch (which silently mutes
+     * performHapticFeedback) doesn't apply.
+     */
+    private fun buzzBlackout() {
+        val vibrator = vibrator()
+        if (vibrator == null || !vibrator.hasVibrator()) {
+            performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            return
+        }
+        val effect = VibrationEffect.createWaveform(BLACKOUT_TIMINGS, BLACKOUT_AMPLITUDES, -1)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            vibrator.vibrate(effect, VibrationAttributes.createForUsage(VibrationAttributes.USAGE_MEDIA))
+        } else {
+            vibrator.vibrate(effect)
+        }
+    }
+
+    private fun vibrator(): Vibrator? =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            context.getSystemService(VibratorManager::class.java)?.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            context.getSystemService(Vibrator::class.java)
+        }
 
     /** The HOTEL's "L" stays fixed for the rest of the day once someone fixes it. */
     fun setHotelFixed(value: Boolean) {
@@ -271,6 +304,10 @@ class SceneView @JvmOverloads constructor(
 
     private companion object {
         const val LONG_PRESS_MS = 650L
+
+        // Waveform segments (ms) and their strength (0–255): thunk, gap, sputter, gap, sputter, gap, hum.
+        val BLACKOUT_TIMINGS = longArrayOf(0, 90, 120, 40, 90, 45, 150, 265)
+        val BLACKOUT_AMPLITUDES = intArrayOf(0, 255, 0, 150, 0, 110, 0, 55)
         const val SPRING = 6f
         val DAMPING = 2f * sqrt(SPRING)
     }

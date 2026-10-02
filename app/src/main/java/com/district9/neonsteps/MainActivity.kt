@@ -88,7 +88,7 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
         }
         header.onPermissionRequest = ::onPermissionTap
         history.onDismiss = ::closeHistory
-        scene.setOnClickListener { scene.strike(0.55f) } // tap the sky: thunder on demand
+        scene.setOnClickListener { scene.strike(0.55f) } // tap the street: thunder on demand
         ticker.provider = ::headlines
 
         applyInsets()
@@ -228,6 +228,7 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
             } else {
                 add(TickerItem("META CUMPLIDA · LA TORRE 61 TE SALUDA", highlight = true))
             }
+            add(TickerItem("DESLIZA EL DEDO PARA RECORRER EL DISTRITO", highlight = true))
             add(TickerItem("BOMBAS DE DRENAJE AL 140%"))
             add(TickerItem("${Format.km(steps)} RECORRIDOS BAJO LA LLUVIA"))
             add(TickerItem("EL LETRERO DEL HOTEL SIGUE SIN SU «L» · EL TÉCNICO VENDRÁ «MAÑANA»"))

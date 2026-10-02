@@ -225,7 +225,8 @@ internal class Market(private val frame: SceneFrame, private val sprites: Sprite
 }
 
 /** People walking the kerb under umbrellas whose shafts glow like tubes. */
-internal class Pedestrians(private val frame: SceneFrame, private val sprites: Sprites) {
+/** @param panMargin extra room past the screen edges, so walkers don't pop in when the street is panned. */
+internal class Pedestrians(private val frame: SceneFrame, private val sprites: Sprites, private val panMargin: Float) {
     private val count = 3
     private val x = floatArrayOf(frame.x(560f), frame.x(650f), frame.x(180f))
     private val dir = floatArrayOf(1f, -1f, 1f)
@@ -253,7 +254,7 @@ internal class Pedestrians(private val frame: SceneFrame, private val sprites: S
         for (i in 0 until count) {
             x[i] += dir[i] * speed[i] * dt
             phase[i] += dt * speed[i] / frame.s(9f)
-            val pad = frame.s(90f)
+            val pad = frame.s(90f) + panMargin
             if (x[i] > width + pad) x[i] = -pad
             if (x[i] < -pad) x[i] = width + pad
         }

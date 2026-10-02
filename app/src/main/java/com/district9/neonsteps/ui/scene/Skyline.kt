@@ -69,7 +69,11 @@ internal class SkyLayer(
     }
 }
 
-internal class Skyline(private val frame: SceneFrame, private val margin: Float, monoBold: Typeface) {
+/**
+ * @param maxShift the largest camera offset (px at parallax 1); each layer is generated wide
+ *   enough that panning never reveals its edge.
+ */
+internal class Skyline(private val frame: SceneFrame, private val maxShift: Float, monoBold: Typeface) {
     val layers: List<SkyLayer>
     val beacons = mutableListOf<Beacon>()
 
@@ -100,19 +104,20 @@ internal class Skyline(private val frame: SceneFrame, private val margin: Float,
 
     init {
         val specs = listOf(
-            Spec(0xFF1D0638.toInt(), 0.42f, 40f, 95f, 380f, 820f, 5f, 7f, 13f, 17f, 0.20f, 0.55f, 0.22f),
-            Spec(0xFF15042F.toInt(), 0.30f, 60f, 135f, 450f, 900f, 7f, 9f, 18f, 22f, 0.25f, 0.70f, 0.45f),
-            Spec(0xFF0D0222.toInt(), 0.18f, 90f, 190f, 540f, 980f, 8f, 11f, 23f, 29f, 0.28f, 0.85f, 0.70f),
-            Spec(Neon.INK, 0.06f, 0f, 0f, 0f, 0f, 10f, 13f, 30f, 38f, 0.30f, 1f, 1f),
+            Spec(0xFF1D0638.toInt(), 0.42f, 40f, 95f, 380f, 820f, 5f, 7f, 13f, 17f, 0.20f, 0.55f, PARALLAX[0]),
+            Spec(0xFF15042F.toInt(), 0.30f, 60f, 135f, 450f, 900f, 7f, 9f, 18f, 22f, 0.25f, 0.70f, PARALLAX[1]),
+            Spec(0xFF0D0222.toInt(), 0.18f, 90f, 190f, 540f, 980f, 8f, 11f, 23f, 29f, 0.28f, 0.85f, PARALLAX[2]),
+            Spec(Neon.INK, 0.06f, 120f, 230f, 560f, 1000f, 10f, 13f, 30f, 38f, 0.30f, 1f, PARALLAX[3]),
         )
         layers = specs.mapIndexed { index, spec ->
+            val margin = marginFor(spec.parallax)
             val blocks = when (index) {
-                1 -> proceduralBlocks(spec, avoid = null)
-                2 -> proceduralBlocks(spec, avoid = 470f to 650f) + Block(495f, 690f, 625f, crown = 2)
-                3 -> nearBlocks()
-                else -> proceduralBlocks(spec, avoid = null)
+                2 -> proceduralBlocks(spec, margin, avoid = 470f to 650f) + Block(495f, 690f, 625f, crown = 2)
+                // Hand-placed street front, extended with generated towers for when you pan.
+                3 -> proceduralBlocks(spec, margin, avoid = -60f to 1160f) + nearBlocks()
+                else -> proceduralBlocks(spec, margin, avoid = null)
             }
-            buildLayer(spec, blocks, index)
+            buildLayer(spec, blocks, index, margin)
         }
     }
 
@@ -127,25 +132,32 @@ internal class Skyline(private val frame: SceneFrame, private val margin: Float,
         Block(1040f, 640f, 1160f),
     )
 
-    private fun proceduralBlocks(spec: Spec, avoid: Pair<Float, Float>?): List<Block> {
+    private fun marginFor(parallax: Float) = maxShift * parallax + frame.s(40f)
+
+    /**
+     * Fills the view width plus [margin] with towers, in reference units. Towers stop short of
+     * [avoid] (hand-placed buildings live there) without leaving a gap on either side.
+     */
+    private fun proceduralBlocks(spec: Spec, margin: Float, avoid: Pair<Float, Float>?): List<Block> {
         val out = mutableListOf<Block>()
-        // Cover the whole view width (plus parallax margin), expressed in reference units.
         val startRef = (-margin - frame.x(0f)) / frame.k - 40f
         val endRef = (frame.width + margin - frame.x(0f)) / frame.k + 40f
         var x = startRef
         while (x < endRef) {
-            val w = rng.range(spec.minW, spec.maxW)
-            val inAvoid = avoid != null && x + w > avoid.first && x < avoid.second
-            if (!inAvoid) {
-                val top = rng.range(spec.minTop, spec.maxTop)
-                out += Block(x, top, x + w, crown = if (rng.chance(0.3f)) 1 + rng.int(0, 3) else 0, antenna = rng.chance(0.18f))
+            if (avoid != null && x >= avoid.first && x < avoid.second) {
+                x = avoid.second
+                continue
             }
+            var w = rng.range(spec.minW, spec.maxW)
+            if (avoid != null && x < avoid.first && x + w > avoid.first) w = avoid.first + 10f - x
+            val top = rng.range(spec.minTop, spec.maxTop)
+            out += Block(x, top, x + w, crown = if (rng.chance(0.3f)) 1 + rng.int(0, 3) else 0, antenna = rng.chance(0.18f))
             x += w * rng.range(0.72f, 1.02f)
         }
         return out
     }
 
-    private fun buildLayer(spec: Spec, blocks: List<Block>, index: Int): SkyLayer {
+    private fun buildLayer(spec: Spec, blocks: List<Block>, index: Int, margin: Float): SkyLayer {
         val minTopRef = (blocks.minOfOrNull { it.t } ?: 900f) - 140f
         val top = frame.y(minTopRef).coerceAtLeast(0f)
         val left = -margin
@@ -283,11 +295,19 @@ internal class Skyline(private val frame: SceneFrame, private val margin: Float,
 
     /** @param layerDx parallax offset of each layer, indexed like [layers]. */
     fun drawBeacons(canvas: Canvas, sprites: Sprites, t: Float, layerDx: FloatArray) {
+        // Beacons are generated per layer; cull those panned out of view.
+        val w = frame.width + frame.s(30f)
         for (b in beacons) {
             val dx = layerDx[b.layer]
+            if (b.x + dx < -frame.s(30f) || b.x + dx > w) continue
             val on = smoothstep(0.55f, 1f, 0.5f + 0.5f * wave(t, b.period, b.phase))
             sprites.drawBlob(canvas, b.x + dx, b.y, frame.s(26f), frame.s(26f), b.color, 0.55f * on)
             sprites.drawBlob(canvas, b.x + dx, b.y, frame.s(6f), frame.s(6f), 0xFFFFFFFF.toInt(), 0.9f * on)
         }
+    }
+
+    companion object {
+        /** How far each layer moves per pixel of camera pan, far to near. */
+        val PARALLAX = floatArrayOf(0.12f, 0.32f, 0.6f, 1f)
     }
 }

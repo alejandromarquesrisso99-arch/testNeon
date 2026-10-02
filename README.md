@@ -27,9 +27,11 @@ compilada en otro ordenador, desinstala antes la anterior.
 - **META**: toca para cambiar la meta diaria (4.000 – 20.000 pasos).
 - **HISTORIAL**: últimos 7 días con la línea de meta; toca una columna para ver su valor.
 - **LLUVIA**: AUTO (llueve más fuerte cuanto más rápido caminas), llovizna, lluvia o aguacero.
-- Cada 1.000 pasos cae un relámpago; al llegar a la meta, dos. Toca el cielo para invocar uno.
+- **Desliza el dedo** de lado a lado para recorrer la calle: cada capa de edificios se mueve a
+  su propia velocidad (las lejanas apenas, el mercado más que nada) y al soltar vuelve sola.
+- Cada 1.000 pasos cae un relámpago; al llegar a la meta, dos. Toca la calle para invocar uno.
 - El noticiero **D9 WIRE** comenta tu caminata (y el letrero del HOTEL, que sigue sin su «L»).
-- Inclina el móvil para mover los edificios en paralaje.
+- Inclinar el móvil también desplaza un poco las capas.
 
 ## Cómo cuenta
 

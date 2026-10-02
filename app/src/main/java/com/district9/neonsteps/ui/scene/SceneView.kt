@@ -3,10 +3,20 @@ package com.district9.neonsteps.ui.scene
 import android.content.Context
 import android.graphics.Canvas
 import android.util.AttributeSet
+import android.view.MotionEvent
+import android.view.VelocityTracker
 import android.view.View
+import android.view.ViewConfiguration
 import com.district9.neonsteps.ui.NeonFonts
+import kotlin.math.abs
+import kotlin.math.sign
+import kotlin.math.sqrt
 
-/** Full-screen, live-rendered District 9 street. Purely decorative for accessibility. */
+/**
+ * Full-screen, live-rendered District 9 street. Drag sideways to pan the city: each layer
+ * slides at its own speed, then the camera springs back. A tap calls down lightning.
+ * Purely decorative for accessibility.
+ */
 class SceneView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
@@ -22,6 +32,15 @@ class SceneView @JvmOverloads constructor(
     private var tilt: Float? = null
     private var activity = 0f
     private var pendingStrike = 0f
+
+    // Drag-to-pan state, kept here so it survives the scene being rebuilt.
+    private var pan = 0f
+    private var panVelocity = 0f
+    private var dragging = false
+    private var downX = 0f
+    private var lastX = 0f
+    private var tracker: VelocityTracker? = null
+    private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
 
     init {
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
@@ -82,7 +101,83 @@ class SceneView @JvmOverloads constructor(
 
     /** Advance the simulation by [dt] seconds without waiting for vsync (used by tests and previews). */
     internal fun advance(dt: Float) {
-        ensureScene()?.update(dt)
+        val s = ensureScene() ?: return
+        stepPan(s, dt)
+        s.update(dt)
+    }
+
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                downX = event.x
+                lastX = event.x
+                dragging = false
+                tracker?.recycle()
+                tracker = VelocityTracker.obtain().also { it.addMovement(event) }
+            }
+            MotionEvent.ACTION_MOVE -> {
+                tracker?.addMovement(event)
+                if (!dragging && abs(event.x - downX) > touchSlop) {
+                    dragging = true
+                    panVelocity = 0f
+                    // Start from the slop boundary so movement past it isn't swallowed.
+                    lastX = downX + sign(event.x - downX) * touchSlop
+                    parent?.requestDisallowInterceptTouchEvent(true)
+                }
+                if (dragging) {
+                    dragBy(event.x - lastX)
+                    lastX = event.x
+                }
+            }
+            MotionEvent.ACTION_UP -> {
+                if (dragging) {
+                    tracker?.let {
+                        it.addMovement(event)
+                        it.computeCurrentVelocity(1000)
+                        panVelocity = it.xVelocity
+                    }
+                } else {
+                    performClick()
+                }
+                endGesture()
+            }
+            MotionEvent.ACTION_CANCEL -> endGesture()
+        }
+        return true
+    }
+
+    override fun performClick(): Boolean = super.performClick()
+
+    private fun endGesture() {
+        dragging = false
+        tracker?.recycle()
+        tracker = null
+    }
+
+    /** Follows the finger 1:1 at the near layer, with rubber-band resistance past the range. */
+    private fun dragBy(dx: Float) {
+        val range = scene?.panRange ?: return
+        val resist = if (abs(pan) > range && sign(dx) == sign(pan)) 0.3f else 1f
+        pan = (pan + dx * resist).coerceIn(-range * 1.15f, range * 1.15f)
+    }
+
+    /** After release: fling momentum into a critically damped spring back to centre. */
+    private fun stepPan(s: CityScene, dt: Float) {
+        if (!dragging && dt > 0f) {
+            val accel = -SPRING * pan - DAMPING * panVelocity
+            panVelocity += accel * dt
+            pan += panVelocity * dt
+            val limit = s.panRange * 1.15f
+            if (abs(pan) > limit) {
+                pan = limit * sign(pan)
+                panVelocity = 0f
+            }
+            if (abs(pan) < 0.1f && abs(panVelocity) < 1f) {
+                pan = 0f
+                panVelocity = 0f
+            }
+        }
+        s.pan = pan
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -90,6 +185,7 @@ class SceneView @JvmOverloads constructor(
         val now = System.nanoTime()
         val dt = if (lastFrameNs == 0L) 0f else ((now - lastFrameNs) / 1e9f).coerceIn(0f, 0.05f)
         lastFrameNs = now
+        stepPan(s, dt)
         s.update(dt)
         s.draw(canvas)
         if (isShown) postInvalidateOnAnimation()
@@ -101,5 +197,10 @@ class SceneView @JvmOverloads constructor(
             lastFrameNs = 0L
             postInvalidateOnAnimation()
         }
+    }
+
+    private companion object {
+        const val SPRING = 6f
+        val DAMPING = 2f * sqrt(SPRING)
     }
 }

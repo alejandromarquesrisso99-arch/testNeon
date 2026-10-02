@@ -18,13 +18,14 @@ import kotlin.math.sin
  * reflection. Static scenery is baked once at low resolution and blurred; neon signs are
  * mirrored live so their flicker shows up in the puddles too.
  */
-internal class WetStreet(private val frame: SceneFrame) {
+/** @param margin extra width baked past each screen edge, so panning never reveals a seam. */
+internal class WetStreet(private val frame: SceneFrame, private val margin: Float) {
     private val horizon = frame.horizon
     private val streetH = (frame.height - horizon).coerceAtLeast(1f)
     private val q = 0.25f
 
     private val baked: Bitmap = Bitmap.createBitmap(
-        (frame.width * q).toInt().coerceAtLeast(1),
+        ((frame.width + 2 * margin) * q).toInt().coerceAtLeast(1),
         (streetH * q).toInt().coerceAtLeast(1),
         Bitmap.Config.ARGB_8888,
     )
@@ -67,7 +68,7 @@ internal class WetStreet(private val frame: SceneFrame) {
         val rng = Rng(77)
         val colors = intArrayOf(Neon.MAGENTA, Neon.CYAN, Neon.YELLOW, 0xFFD8C8FF.toInt())
         for (i in 0 until glints) {
-            glintX[i] = rng.range(0f, frame.width.toFloat())
+            glintX[i] = rng.range(-margin, frame.width + margin)
             glintY[i] = horizon + streetH * rng.range(0.08f, 0.95f).pow(1.3f)
             glintLen[i] = frame.s(rng.range(18f, 90f)) * (0.4f + (glintY[i] - horizon) / streetH)
             glintColor[i] = colors[rng.int(0, colors.size)]
@@ -84,7 +85,7 @@ internal class WetStreet(private val frame: SceneFrame) {
         c.save()
         // Mirror around the horizon: a point h px above the kerb lands h px below it.
         c.scale(q, -q)
-        c.translate(0f, -horizon)
+        c.translate(margin, -horizon)
         drawAbove(c)
         c.restore()
         boxBlur(baked, radiusX = 2, radiusY = 5)
@@ -108,7 +109,7 @@ internal class WetStreet(private val frame: SceneFrame) {
             val off = amp * (sin(t * 1.3f + i * 0.7f) + 0.5f * sin(t * 2.7f + i * 1.9f)) + dx
 
             src.set(0, ((y0 - horizon) * q).toInt(), baked.width, ((y1 - horizon) * q).toInt().coerceAtLeast(((y0 - horizon) * q).toInt() + 1))
-            dst.set(off - frame.s(12f), y0, w + off + frame.s(12f), y1 + 0.5f)
+            dst.set(off - margin, y0, w + off + margin, y1 + 0.5f)
             canvas.drawBitmap(baked, src, dst, reflPaint)
 
             canvas.save()

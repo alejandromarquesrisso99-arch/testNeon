@@ -3,6 +3,7 @@ package com.district9.neonsteps
 import android.Manifest
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.view.MotionEvent
 import android.view.View
 import com.district9.neonsteps.data.StepRepository
 import com.district9.neonsteps.ui.scene.SceneView
@@ -72,6 +73,26 @@ class ScreenshotTest {
         shadowOf(RuntimeEnvironment.getApplication()).denyPermissions(Manifest.permission.ACTIVITY_RECOGNITION)
         val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
         render(activity, "permission.png", seconds = 3f)
+    }
+
+    @Test
+    fun pannedByDrag() {
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        StepRepository.get(activity).addSteps(6_482)
+        val root = activity.findViewById<View>(R.id.root)
+        root.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(2340, View.MeasureSpec.EXACTLY))
+        root.layout(0, 0, 1080, 2340)
+        val scene = activity.findViewById<SceneView>(R.id.scene)
+        scene.advance(1f / 30f)
+        // Drag right-to-left across the street and hold the finger down while capturing.
+        val t0 = android.os.SystemClock.uptimeMillis()
+        fun touch(action: Int, x: Float, dt: Long) =
+            MotionEvent.obtain(t0, t0 + dt, action, x, 1200f, 0).also { scene.dispatchTouchEvent(it); it.recycle() }
+        touch(MotionEvent.ACTION_DOWN, 900f, 0)
+        touch(MotionEvent.ACTION_MOVE, 860f, 16)
+        touch(MotionEvent.ACTION_MOVE, 660f, 32)
+        touch(MotionEvent.ACTION_MOVE, 500f, 48)
+        render(activity, "panned.png", seconds = 1f)
     }
 
     @Test

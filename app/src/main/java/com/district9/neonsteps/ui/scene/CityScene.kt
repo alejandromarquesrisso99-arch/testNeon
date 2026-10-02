@@ -11,13 +11,18 @@ import com.district9.neonsteps.ui.NeonFonts
 internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Float) {
     val frame = SceneFrame(width, height, horizon)
     private val sprites = Sprites()
-    private val margin = frame.s(44f)
 
-    private val skyline = Skyline(frame, margin, fonts.bold)
+    /** Furthest the drag can take the near layer (rubber band included), plus tilt. */
+    val panRange = frame.s(200f)
+    private val tiltRange = frame.s(55f)
+    private val maxShift = panRange * 1.15f + tiltRange
+    private val frontMargin = maxShift * FRONT_PARALLAX + frame.s(40f)
+
+    private val skyline = Skyline(frame, maxShift, fonts.bold)
     private val hologram = Hologram(frame, fonts.mono, skyline.projectorX, skyline.projectorY)
-    private val market = Market(frame, sprites, margin)
-    private val pedestrians = Pedestrians(frame, sprites)
-    private val street = WetStreet(frame)
+    private val market = Market(frame, sprites, frontMargin)
+    private val pedestrians = Pedestrians(frame, sprites, maxShift * FRONT_PARALLAX)
+    private val street = WetStreet(frame, frontMargin)
     private val rain = Rain(frame)
     private val lightning = Lightning(frame)
 
@@ -63,6 +68,10 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
     private val smogSpeed = floatArrayOf(6f, -4f, 3f, -5f, 4f)
 
     private val layerDx = FloatArray(4)
+    private var camera = 0f
+
+    /** Camera pan from the user's drag, in px at the near layer. */
+    var pan = 0f
     private var tilt = 0f
     private var tiltTarget = 0f
     private var hasTilt = false
@@ -92,7 +101,7 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
 
     private fun bakeReflection() {
         street.bake { c ->
-            c.drawRect(0f, 0f, frame.width.toFloat(), frame.horizon, skyPaint)
+            c.drawRect(-frontMargin, 0f, frame.width + frontMargin, frame.horizon, skyPaint)
             for (i in 0 until 4) skyline.drawLayer(c, i, 0f)
             market.drawStalls(c, 0f, 0f)
         }
@@ -103,7 +112,9 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
         val t = time
         if (!hasTilt) tiltTarget = 0.45f * wave(t, 70f)
         tilt += (tiltTarget - tilt) * (dt * 2.5f).coerceAtMost(1f)
-        for (i in 0 until 4) layerDx[i] = tilt * frame.s(30f) * skyline.layers[i].parallax
+        // Near layers slide further than far ones: that difference is the depth.
+        camera = pan + tilt * tiltRange
+        for (i in 0 until 4) layerDx[i] = camera * skyline.layers[i].parallax
 
         rain.intensity += (rainTarget - rain.intensity) * (dt * 0.8f).coerceAtMost(1f)
         skyline.update(t)
@@ -125,12 +136,12 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
         val t = time
         val w = frame.width.toFloat()
         val near = layerDx[3]
-        val front = tilt * frame.s(36f)
+        val front = camera * FRONT_PARALLAX
 
         canvas.drawRect(0f, 0f, w, frame.horizon, skyPaint)
         for (i in smogX.indices) {
             val span = w + frame.s(600f)
-            val x = ((smogX[i] * w + smogSpeed[i] * frame.s(1f) * t) % span + span) % span - frame.s(300f)
+            val x = ((smogX[i] * w + smogSpeed[i] * frame.s(1f) * t + camera * 0.05f) % span + span) % span - frame.s(300f)
             sprites.drawBlob(canvas, x, frame.y(smogY[i]), frame.s(smogR[i]), frame.s(smogR[i] * 0.45f), smogC[i], 0.42f)
         }
         sprites.drawBlob(canvas, w / 2f, frame.y(1180f), w * 0.85f, frame.s(300f), 0xFF8A1A70.toInt(), 0.32f)
@@ -160,5 +171,10 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
         rain.drawSplashes(canvas)
         rain.drawDrops(canvas)
         lightning.drawOverlay(canvas)
+    }
+
+    private companion object {
+        /** The market and pedestrians are in front of the near towers, so they move further still. */
+        const val FRONT_PARALLAX = 1.2f
     }
 }

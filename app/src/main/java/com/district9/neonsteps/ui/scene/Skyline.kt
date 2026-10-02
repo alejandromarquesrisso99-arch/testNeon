@@ -156,26 +156,36 @@ internal class Skyline(private val frame: SceneFrame, private val maxShift: Floa
     private fun marginFor(parallax: Float) = maxShift * parallax + frame.s(40f)
 
     /**
-     * Fills the view width plus [margin] with towers, in reference units. Towers stop short of
-     * [avoid] (hand-placed buildings live there) without leaving a gap on either side.
+     * Fills the view width plus [margin] with towers, in reference units, leaving [avoid] to
+     * the hand-placed buildings. Left of it towers are laid outward from its edge, so every
+     * tower is full width (no sliver squeezed in at the seam); right of it, outward too.
      */
     private fun proceduralBlocks(spec: Spec, margin: Float, avoid: Pair<Float, Float>?): List<Block> {
         val out = mutableListOf<Block>()
         val startRef = (-margin - frame.x(0f)) / frame.k - 40f
         val endRef = (frame.width + margin - frame.x(0f)) / frame.k + 40f
-        var x = startRef
-        while (x < endRef) {
-            if (avoid != null && x >= avoid.first && x < avoid.second) {
-                x = avoid.second
-                continue
+        if (avoid != null) {
+            var right = avoid.first + 10f
+            while (right > startRef) {
+                val w = rng.range(spec.minW, spec.maxW)
+                out += procedural(spec, right - w, right)
+                right -= w * rng.range(0.72f, 1.02f)
             }
-            var w = rng.range(spec.minW, spec.maxW)
-            if (avoid != null && x < avoid.first && x + w > avoid.first) w = avoid.first + 10f - x
-            val top = rng.range(spec.minTop, spec.maxTop)
-            out += Block(x, top, x + w, crown = if (rng.chance(0.3f)) 1 + rng.int(0, 3) else 0, antenna = rng.chance(0.18f))
+        }
+        var x = avoid?.let { it.second - 10f } ?: startRef
+        while (x < endRef) {
+            val w = rng.range(spec.minW, spec.maxW)
+            out += procedural(spec, x, x + w)
             x += w * rng.range(0.72f, 1.02f)
         }
         return out
+    }
+
+    /** A generated tower: windows always; the banded, windowless facade is Tower 61's alone. */
+    private fun procedural(spec: Spec, l: Float, r: Float): Block {
+        val top = rng.range(spec.minTop, spec.maxTop)
+        val crown = if (rng.chance(0.3f)) (if (rng.chance(0.5f)) 1 else 3) else 0
+        return Block(l, top, r, crown = crown, antenna = rng.chance(0.18f))
     }
 
     private fun buildLayer(spec: Spec, blocks: List<Block>, index: Int, margin: Float): SkyLayer {

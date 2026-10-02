@@ -94,6 +94,12 @@ internal class Hologram(
     private val broth = Paint(Paint.ANTI_ALIAS_FLAG)
     private val oval = RectF()
 
+    /** Streak perk: a smaller magenta koi that shares the beam. */
+    var companion = false
+    private var k2x = beamX(2.6f)
+    private var k2y = beamY(2.6f)
+    private var k2vx = 1f
+
     /** Golden glitter trail, in sky coordinates. */
     val glitter = Sparks(frame, 160)
 
@@ -165,6 +171,14 @@ internal class Hologram(
         if (dt > 0f) kvx += ((nx - kx) / dt - kvx) * (dt * 8f).coerceAtMost(1f)
         kx = nx
         ky = ny
+
+        // The companion circles the other way round, higher up the beam.
+        val c2 = -travel * 1.15f + 2.6f
+        val n2x = frame.x(650f) + frame.s(85f) * sin(c2)
+        val n2y = frame.y(322f) + frame.s(18f) * sin(c2 * 2f + 0.3f)
+        if (dt > 0f) k2vx += ((n2x - k2x) / dt - k2vx) * (dt * 8f).coerceAtMost(1f)
+        k2x = n2x
+        k2y = n2y
 
         if (gold > 0.15f) {
             glitterDebt += dt * 40f * gold
@@ -352,12 +366,23 @@ internal class Hologram(
         // While ramen is on, the bowl takes the koi's place in the beam (a loose koi stays out).
         if (bowlVisible && gold < 0.5f) return
 
+        val f2 = flicker(t + 0.37f) * power
+        if (companion && !bowlVisible && f2 > 0.01f) {
+            val face2 = -k2vx / (abs(k2vx) + frame.s(25f))
+            val sq2 = (0.16f + 0.84f * abs(face2).pow(0.3f)) * if (face2 >= 0f) 1f else -1f
+            buildWireframe(k2x + dx, k2y, sq2, length * 0.78f)
+            drawLines(canvas, frame.s(5f), Neon.alpha(Neon.MAGENTA, 0.10f * f2), 0f, 0f)
+            drawLines(canvas, frame.s(1.6f), Neon.alpha(Neon.CYAN, 0.55f * f2), frame.s(3f), frame.s(1.2f))
+            drawLines(canvas, frame.s(1.6f), Neon.alpha(Neon.MAGENTA, 0.9f * f2), -frame.s(1.5f), 0f)
+            drawLines(canvas, frame.s(0.8f), Neon.alpha(0xFFFFE6F3.toInt(), 0.7f * f2), -frame.s(1f), 0f)
+        }
+
         if (gold > 0f) sprites.drawBlob(canvas, x, ky, length * 0.9f, length * 0.55f, GOLD, 0.22f * gold * f)
 
         // Facing follows the swim direction; near the turn the koi is seen head-on.
         val facing = -kvx / (abs(kvx) + frame.s(25f))
         val squash = (0.16f + 0.84f * abs(facing).pow(0.3f)) * if (facing >= 0f) 1f else -1f
-        buildWireframe(x, ky, squash)
+        buildWireframe(x, ky, squash, length)
 
         val main = Neon.mix(Neon.CYAN, GOLD, gold)
         val chroma = Neon.mix(Neon.MAGENTA, 0xFFFF7A2E.toInt(), gold)
@@ -382,16 +407,16 @@ internal class Hologram(
         return (0.22f * sin(PI.toFloat() * body.pow(0.72f))).coerceAtLeast(if (u > 0.05f) 0.045f else 0f)
     }
 
-    private fun buildWireframe(cx: Float, cy: Float, sx: Float) {
+    private fun buildWireframe(cx: Float, cy: Float, sx: Float, len: Float) {
         lineCount = 0
-        val half = length / 2f
+        val half = len / 2f
         val bodyEnd = 0.8f
         for (i in 0 until stations) {
             val u = i / (stations - 1f) * bodyEnd
             val sway = 0.11f * u.pow(1.5f) * sin(2f * PI.toFloat() * (u * 0.85f - swimPhase * 0.5f))
-            val x = cx + (u * length - half) * sx
-            val yc = cy + sway * length
-            val h = profile(u) * length
+            val x = cx + (u * len - half) * sx
+            val yc = cy + sway * len
+            val h = profile(u) * len
             top[i * 2] = x; top[i * 2 + 1] = yc - h
             bottom[i * 2] = x; bottom[i * 2 + 1] = yc + h * 0.85f
             mid[i * 2] = x; mid[i * 2 + 1] = yc
@@ -409,12 +434,12 @@ internal class Hologram(
         val tailBase = stations - 1
         val tx = top[tailBase * 2]
         val ty = mid[tailBase * 2 + 1]
-        val sway = 0.06f * sin(2f * PI.toFloat() * (0.9f - swimPhase * 0.5f)) * length
-        val tipX = tx + 0.24f * length * sx
-        val upperX = tipX + 0.03f * length * sx
-        val upperY = ty - 0.16f * length + sway
-        val lowerY = ty + 0.14f * length + sway
-        val notchX = tx + 0.13f * length * sx
+        val sway = 0.06f * sin(2f * PI.toFloat() * (0.9f - swimPhase * 0.5f)) * len
+        val tipX = tx + 0.24f * len * sx
+        val upperX = tipX + 0.03f * len * sx
+        val upperY = ty - 0.16f * len + sway
+        val lowerY = ty + 0.14f * len + sway
+        val notchX = tx + 0.13f * len * sx
         val notchY = ty + sway * 0.5f
         line(tx, top[tailBase * 2 + 1], upperX, upperY)
         line(upperX, upperY, notchX, notchY)
@@ -426,21 +451,21 @@ internal class Hologram(
         // Dorsal fin.
         val d0 = 3
         val d1 = 6
-        line(top[d0 * 2], top[d0 * 2 + 1], top[d1 * 2] - 0.02f * length * sx, top[d1 * 2 + 1] - 0.12f * length)
-        line(top[d1 * 2] - 0.02f * length * sx, top[d1 * 2 + 1] - 0.12f * length, top[d1 * 2], top[d1 * 2 + 1])
+        line(top[d0 * 2], top[d0 * 2 + 1], top[d1 * 2] - 0.02f * len * sx, top[d1 * 2 + 1] - 0.12f * len)
+        line(top[d1 * 2] - 0.02f * len * sx, top[d1 * 2 + 1] - 0.12f * len, top[d1 * 2], top[d1 * 2 + 1])
         // Pectoral fin.
         val p = 3
         val fin = 0.5f + 0.5f * sin(swimPhase * 3f)
-        line(bottom[p * 2], bottom[p * 2 + 1], bottom[p * 2] + 0.1f * length * sx, bottom[p * 2 + 1] + (0.07f + 0.04f * fin) * length)
-        line(bottom[p * 2] + 0.1f * length * sx, bottom[p * 2 + 1] + (0.07f + 0.04f * fin) * length, bottom[(p + 1) * 2], bottom[(p + 1) * 2 + 1])
+        line(bottom[p * 2], bottom[p * 2 + 1], bottom[p * 2] + 0.1f * len * sx, bottom[p * 2 + 1] + (0.07f + 0.04f * fin) * len)
+        line(bottom[p * 2] + 0.1f * len * sx, bottom[p * 2 + 1] + (0.07f + 0.04f * fin) * len, bottom[(p + 1) * 2], bottom[(p + 1) * 2 + 1])
         // Barbels and eye.
         val nx = mid[0]
         val ny = mid[1]
-        line(nx, ny, nx - 0.07f * length * sx, ny + 0.06f * length)
-        line(nx + 0.02f * length * sx, ny + 0.01f * length, nx - 0.05f * length * sx, ny + 0.1f * length)
-        val ex = nx + 0.09f * length * sx
-        val ey = ny - 0.045f * length
-        val er = 0.018f * length
+        line(nx, ny, nx - 0.07f * len * sx, ny + 0.06f * len)
+        line(nx + 0.02f * len * sx, ny + 0.01f * len, nx - 0.05f * len * sx, ny + 0.1f * len)
+        val ex = nx + 0.09f * len * sx
+        val ey = ny - 0.045f * len
+        val er = 0.018f * len
         for (k in 0 until 6) {
             val a0 = k / 6f * 2f * PI.toFloat()
             val a1 = (k + 1) / 6f * 2f * PI.toFloat()

@@ -33,11 +33,17 @@ internal class Market(private val frame: SceneFrame, private val sprites: Sprite
             intArrayOf(Neon.YELLOW, Neon.MAGENTA, Neon.CYAN, 0xFFFFFFFF.toInt()), floatArrayOf(880f, 968f)),
     )
 
+    /** Streak perk: a dango stand that opens in the gap between the first two stalls. */
+    private val dango = StallSpec(132f, 286f, 0xFFFF7EB6.toInt(), 0xFF4FD6A0.toInt(), 0xFF7CFFB2.toInt(),
+        intArrayOf(0xFFFF9EC7.toInt(), 0xFF7CFFB2.toInt(), 0xFFFFFFFF.toInt()), floatArrayOf(208f))
+    var dangoOpen = false
+
     private val awningTop = frame.y(1258f)
     private val awningBottom = frame.y(1292f)
     private val ground = frame.y(1352f)
 
     val bitmap: Bitmap
+    private val dangoBitmap: Bitmap
     val bitmapLeft = -margin
     val bitmapTop = frame.y(1225f)
 
@@ -46,6 +52,7 @@ internal class Market(private val frame: SceneFrame, private val sprites: Sprite
     private val bulbY: FloatArray
     private val bulbColor: IntArray
     private val bulbPhase: FloatArray
+    private val bulbIsDango: BooleanArray
 
     // Steam particles.
     private val steamSources: FloatArray
@@ -58,6 +65,7 @@ internal class Market(private val frame: SceneFrame, private val sprites: Sprite
     private val sLife = FloatArray(maxSteam) { 1f }
     private var steamAccumulator = 0f
     private var steamCursor = 0
+    private val dangoSteam: Int
 
     private val rng = Rng(9)
 
@@ -68,11 +76,17 @@ internal class Market(private val frame: SceneFrame, private val sprites: Sprite
         val c = Canvas(bitmap)
         c.translate(-bitmapLeft, -bitmapTop)
         for (spec in specs) bakeStall(c, spec)
+        dangoBitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        Canvas(dangoBitmap).apply {
+            translate(-bitmapLeft, -bitmapTop)
+            bakeStall(this, dango)
+        }
 
         val xs = ArrayList<Float>()
         val ys = ArrayList<Float>()
         val cs = ArrayList<Int>()
-        for (spec in specs) {
+        val optional = ArrayList<Boolean>()
+        for (spec in specs + dango) {
             val l = frame.x(spec.l) + frame.s(14f)
             val r = frame.x(spec.r) - frame.s(14f)
             val n = ((r - l) / frame.s(30f)).toInt().coerceAtLeast(2)
@@ -81,13 +95,16 @@ internal class Market(private val frame: SceneFrame, private val sprites: Sprite
                 xs += l + (r - l) * u
                 ys += awningBottom + frame.s(10f) + frame.s(7f) * sin(PI.toFloat() * u)
                 cs += spec.bulbColors[i % spec.bulbColors.size]
+                optional += spec === dango
             }
         }
+        bulbIsDango = optional.toBooleanArray()
         bulbX = xs.toFloatArray()
         bulbY = ys.toFloatArray()
         bulbColor = cs.toIntArray()
         bulbPhase = FloatArray(bulbX.size) { rng.next() * 10f }
-        steamSources = specs.flatMap { s -> s.steam.map { frame.x(it) } }.toFloatArray()
+        steamSources = (specs + dango).flatMap { s -> s.steam.map { frame.x(it) } }.toFloatArray()
+        dangoSteam = dango.steam.size
     }
 
     private fun bakeStall(c: Canvas, spec: StallSpec) {
@@ -174,12 +191,14 @@ internal class Market(private val frame: SceneFrame, private val sprites: Sprite
     }
 
     fun update(dt: Float) {
-        steamAccumulator += dt * 5f * steamSources.size
-        while (steamAccumulator >= 1f && steamSources.isNotEmpty()) {
+        // The dango stand's pot is last in the list; it only steams while the stand is open.
+        val sources = if (dangoOpen) steamSources.size else steamSources.size - dangoSteam
+        steamAccumulator += dt * 5f * sources
+        while (steamAccumulator >= 1f && sources > 0) {
             steamAccumulator -= 1f
             val i = steamCursor
             steamCursor = (steamCursor + 1) % maxSteam
-            val src = steamSources[rng.int(0, steamSources.size)]
+            val src = steamSources[rng.int(0, sources)]
             sx[i] = src + frame.s(rng.range(-10f, 10f))
             sy[i] = ground - frame.s(46f)
             svx[i] = frame.s(rng.range(-14f, 3f))
@@ -200,6 +219,7 @@ internal class Market(private val frame: SceneFrame, private val sprites: Sprite
 
     fun drawStalls(canvas: Canvas, t: Float, dx: Float, blackoutT: Float = -1f) {
         canvas.drawBitmap(bitmap, bitmapLeft + dx, bitmapTop, null)
+        if (dangoOpen) canvas.drawBitmap(dangoBitmap, bitmapLeft + dx, bitmapTop, null)
         if (blackoutT >= 0f) {
             // Counters and awnings lose their light with the grid.
             shade.color = Neon.alpha(0xFF040010.toInt(), 0.75f * (1f - Blackout.power(blackoutT, 0.45f)))
@@ -210,6 +230,7 @@ internal class Market(private val frame: SceneFrame, private val sprites: Sprite
 
     fun drawBulbs(canvas: Canvas, t: Float, dx: Float, alpha: Float, blackoutT: Float = -1f) {
         for (i in bulbX.indices) {
+            if (bulbIsDango[i] && !dangoOpen) continue
             // During a blackout's restore, the string lights come back in a run.
             val grid = if (blackoutT >= 0f) Blackout.power(blackoutT, 0.25f + 0.4f * i / bulbX.size) else 1f
             if (grid <= 0f) continue

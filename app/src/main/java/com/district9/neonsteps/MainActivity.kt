@@ -24,17 +24,20 @@ import android.widget.Toast
 import com.district9.neonsteps.data.RainMode
 import com.district9.neonsteps.data.SensorMode
 import com.district9.neonsteps.data.StepRepository
+import com.district9.neonsteps.data.StreakPerks
 import com.district9.neonsteps.service.StepCounterService
 import com.district9.neonsteps.ui.Neon
 import com.district9.neonsteps.ui.hud.HeaderView
 import com.district9.neonsteps.ui.hud.HistoryView
 import com.district9.neonsteps.ui.hud.HudPanelView
 import com.district9.neonsteps.ui.hud.NeonButtonView
+import com.district9.neonsteps.ui.hud.ProfileView
 import com.district9.neonsteps.ui.hud.TickerItem
 import com.district9.neonsteps.ui.hud.TickerView
 import com.district9.neonsteps.ui.scene.EasterEgg
 import com.district9.neonsteps.ui.scene.SceneView
 import com.district9.neonsteps.util.Format
+import com.district9.neonsteps.widget.StepsWidget
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
@@ -49,6 +52,7 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
     private lateinit var rainButton: NeonButtonView
     private lateinit var ticker: TickerView
     private lateinit var history: HistoryView
+    private lateinit var profile: ProfileView
     private var sensorManager: SensorManager? = null
 
     private val handler = Handler(Looper.getMainLooper())
@@ -79,6 +83,7 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
         rainButton = findViewById(R.id.btn_rain)
         ticker = findViewById(R.id.ticker)
         history = findViewById(R.id.history)
+        profile = findViewById(R.id.profile)
 
         goalButton.accent = Neon.CYAN
         historyButton.accent = Neon.YELLOW
@@ -91,6 +96,12 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
         }
         header.onPermissionRequest = ::onPermissionTap
         history.onDismiss = ::closeHistory
+        hud.setOnClickListener { openProfile() }
+        profile.onDismiss = ::closeProfile
+        profile.onChange = { height, weight ->
+            repo.heightCm = height
+            repo.weightKg = weight
+        }
         scene.setOnClickListener { scene.strike(0.55f) } // tap the street: thunder on demand
         scene.onEasterEgg = ::onEasterEgg
         ticker.provider = ::headlines
@@ -107,6 +118,7 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
             scene.setStreetLimit(top.toFloat())
             // Keep the history modal between the title and the readouts.
             history.setPadding(0, header.bottom, 0, (findViewById<View>(R.id.root).height - v.top).coerceAtLeast(0))
+            profile.setPadding(0, header.bottom, 0, (findViewById<View>(R.id.root).height - v.top).coerceAtLeast(0))
         }
         if (savedInstanceState == null) requestMissingPermissions()
     }
@@ -125,6 +137,7 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
 
     override fun onStop() {
         isInForeground = false
+        StepsWidget.refresh(this, force = true) // leave the home screen up to date
         repo.removeListener(this)
         handler.removeCallbacks(tick)
         sensorManager?.unregisterListener(this)
@@ -145,6 +158,7 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
         val goal = repo.goal
         val percent = Format.percent(steps, goal)
         val cadence = repo.cadence()
+        val streak = repo.streak()
         val permitted = StepCounterService.hasActivityPermission(this)
         val state = when {
             !permitted -> HeaderView.State.NEED_PERMISSION
@@ -152,12 +166,13 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
             else -> HeaderView.State.OK
         }
         header.setData(steps, goal, state)
-        hud.setData(LocalTime.now().format(clockFormat), Format.km(steps), Format.kcal(steps), percent)
+        hud.setData(LocalTime.now().format(clockFormat), Format.km(steps, repo.strideMeters), Format.kcal(steps, repo.kcalPerStep), percent)
 
         goalButton.setText(getString(R.string.btn_goal), Format.steps(goal), getString(R.string.cd_goal_button, Format.steps(goal)))
+        if (profile.isOpen) profile.setData(repo.heightCm, repo.weightKg, repo.strideMeters, repo.kcalPerStep)
         if (history.isOpen) {
             historyButton.setText(getString(R.string.btn_history), getString(R.string.btn_history_close), getString(R.string.cd_history_close))
-            history.setData(repo.history(7), goal)
+            history.setData(repo.history(7), goal, streak)
         } else {
             historyButton.setText(getString(R.string.btn_history), getString(R.string.btn_history_value), getString(R.string.cd_history_button))
         }
@@ -182,7 +197,11 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
             },
         )
 
-        scene.setHotelFixed(repo.hotelFixedToday()) // and at midnight the "L" dies again
+        // After 30 days in a row the technician finally fixes the "L" for good; otherwise it's
+        // fixed for the day someone fixes it, and dies again at midnight.
+        scene.setHotelFixed(repo.hotelFixedToday() || streak >= StreakPerks.HOTEL_FOREVER)
+        scene.setStreak(streak)
+        header.setStreak(streak)
 
         // The goal: Tower 61 lit and fireworks until midnight. The celebration plays once a
         // day — live if the app is open, otherwise the first time it's opened afterwards.
@@ -191,7 +210,17 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
         if (goalMet && !repo.goalCelebratedToday()) {
             repo.markGoalCelebrated()
             // On opening the app, give the street a beat to appear before the show starts.
-            handler.postDelayed({ scene.celebrate() }, if (lastSteps < 0) 700L else 0L)
+            handler.postDelayed({
+                scene.celebrate()
+                val perk = StreakPerks.unlockedAt(streak)
+                ticker.breaking(
+                    if (perk != null) {
+                        TickerItem("NUEVO EN DISTRICT 9 · ${perk.headline}", highlight = true)
+                    } else {
+                        TickerItem("META CUMPLIDA · RACHA DE $streak ${if (streak == 1) "DÍA" else "DÍAS"}", highlight = true)
+                    },
+                )
+            }, if (lastSteps < 0) 700L else 0L)
         } else if (lastSteps in 0 until steps && steps / 1000 > lastSteps / 1000) {
             scene.strike(0.6f) // every thousand steps
         }
@@ -222,31 +251,54 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
     }
 
     private fun openHistory() {
-        history.setData(repo.history(7), repo.goal)
+        closeProfile()
+        history.setData(repo.history(7), repo.goal, repo.streak())
         history.show()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val cb = OnBackInvokedCallback { closeHistory() }
-            onBackInvokedDispatcher.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT, cb)
-            backCallback = cb
-        }
+        syncBackCallback()
         updateUi()
     }
 
     private fun closeHistory() {
         history.hide()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        syncBackCallback()
+        updateUi()
+    }
+
+    private fun openProfile() {
+        closeHistory()
+        profile.setData(repo.heightCm, repo.weightKg, repo.strideMeters, repo.kcalPerStep)
+        profile.show()
+        syncBackCallback()
+    }
+
+    private fun closeProfile() {
+        profile.hide()
+        syncBackCallback()
+    }
+
+    /** Back closes whichever modal is open; with none open it's the system's again. */
+    private fun closeModal(): Boolean = when {
+        profile.isOpen -> { closeProfile(); true }
+        history.isOpen -> { closeHistory(); true }
+        else -> false
+    }
+
+    private fun syncBackCallback() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        val anyOpen = profile.isOpen || history.isOpen
+        if (anyOpen && backCallback == null) {
+            val cb = OnBackInvokedCallback { closeModal() }
+            onBackInvokedDispatcher.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT, cb)
+            backCallback = cb
+        } else if (!anyOpen && backCallback != null) {
             (backCallback as? OnBackInvokedCallback)?.let(onBackInvokedDispatcher::unregisterOnBackInvokedCallback)
             backCallback = null
         }
-        updateUi()
     }
 
     // Below Android 13, back (button or gesture) arrives as a key event.
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-        if (keyCode == KeyEvent.KEYCODE_BACK && history.isOpen) {
-            closeHistory()
-            return true
-        }
+        if (keyCode == KeyEvent.KEYCODE_BACK && closeModal()) return true
         return super.onKeyDown(keyCode, event)
     }
 
@@ -264,8 +316,26 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
                 add(TickerItem("FUEGOS ARTIFICIALES SOBRE DISTRICT 9 HASTA MEDIANOCHE"))
             }
             add(TickerItem("DESLIZA EL DEDO PARA RECORRER EL DISTRITO", highlight = true))
+            if (repo.heightCm == 0 || repo.weightKg == 0) {
+                add(TickerItem("TOCA EL PANEL DE DATOS PARA AJUSTAR TU ALTURA Y PESO", highlight = true))
+            }
+            val streak = repo.streak()
+            val lost = repo.lostStreak()
+            when {
+                streak > 0 -> {
+                    val next = StreakPerks.next(streak)
+                    add(
+                        TickerItem(
+                            "RACHA DE $streak ${if (streak == 1) "DÍA" else "DÍAS"}" +
+                                (next?.let { " · A LOS ${it.days}: ${it.headline}" } ?: " · DISTRICT 9 YA ES TUYO"),
+                            highlight = true,
+                        ),
+                    )
+                }
+                lost >= 2 -> add(TickerItem("SE ROMPIÓ UNA RACHA DE $lost DÍAS · LOS PUESTOS NUEVOS HAN CERRADO"))
+            }
             add(TickerItem("BOMBAS DE DRENAJE AL 140%"))
-            add(TickerItem("${Format.km(steps)} RECORRIDOS BAJO LA LLUVIA"))
+            add(TickerItem("${Format.km(steps, repo.strideMeters)} RECORRIDOS BAJO LA LLUVIA"))
             add(
                 when {
                     repo.hotelFixedToday() -> TickerItem("LA «L» DEL HOTEL FUNCIONA · DE MOMENTO")
@@ -280,7 +350,7 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
             if (repo.sensorMode == SensorMode.ACCELEROMETER) {
                 add(TickerItem("SIN PODÓMETRO · CONTANDO CON EL ACELERÓMETRO CON LA PANTALLA ENCENDIDA", highlight = true))
             }
-            add(TickerItem("HOY HAS QUEMADO ${Format.ramenBowls(steps)} DE RAMEN · DATTEBAYO"))
+            add(TickerItem("HOY HAS QUEMADO ${Format.ramenBowls(steps, repo.kcalPerStep)} DE RAMEN · DATTEBAYO"))
             if (steps >= goal) add(TickerItem("RAMEN GRATIS EN ICHIRAKU PARA QUIEN LLEGA A LA META", highlight = true))
             add(TickerItem("RAMEN 24H EN EL PUESTO 3"))
         }

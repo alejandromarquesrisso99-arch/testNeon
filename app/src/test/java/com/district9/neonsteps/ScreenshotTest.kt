@@ -108,6 +108,31 @@ class ScreenshotTest {
     }
 
     @Test
+    fun thirtyDayStreakGrowsTheCity() {
+        val prefs = RuntimeEnvironment.getApplication().getSharedPreferences("neon_steps", 0).edit()
+        val today = LocalDate.now()
+        for (back in 1..29) prefs.putInt("day_" + today.minusDays(back.toLong()), 9_000 + back * 37)
+        prefs.commit()
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        StepRepository.get(activity).addSteps(8_120)
+        ShadowLooper.idleMainLooper(1, java.util.concurrent.TimeUnit.SECONDS)
+        assertTrue(StepRepository.get(activity).streak() == 30)
+        render(activity, "streak.png", seconds = 13f)
+    }
+
+    @Test
+    fun profilePanel() {
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        StepRepository.get(activity).apply {
+            addSteps(6_482)
+            heightCm = 178
+            weightKg = 74
+        }
+        activity.findViewById<View>(R.id.hud).performClick()
+        render(activity, "profile.png", seconds = 1f)
+    }
+
+    @Test
     fun launcherIcon() {
         val app = RuntimeEnvironment.getApplication()
         val icon = app.getDrawable(R.mipmap.ic_launcher)!!

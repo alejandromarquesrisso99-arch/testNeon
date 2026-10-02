@@ -31,7 +31,13 @@
     <string name="history_today">HOY</string>
     <string name="history_avg">PROMEDIO</string>
     <string name="history_best">MEJOR</string>
-    <string name="history_goal_days">DÍAS EN META</string>
+    <string name="history_goal_days">EN META</string>
+    <string name="history_streak">RACHA</string>
+    <string name="streak_short">RACHA %1$d</string>
+    <plurals name="streak_days">
+        <item quantity="one">RACHA %1$d DÍA</item>
+        <item quantity="other">RACHA %1$d DÍAS</item>
+    </plurals>
 
     <string name="cd_header">%1$s pasos hoy. Meta de %2$s pasos: %3$d%% completado.</string>
     <string name="cd_header_permission">Sensor de pasos desactivado. Toca para conceder el permiso de actividad física.</string>
@@ -49,6 +55,28 @@
     <string name="notif_goal_channel_desc">Avisa una vez al día cuando alcanzas tu meta de pasos.</string>
     <string name="notif_goal_title">¡META CUMPLIDA!</string>
     <string name="notif_goal_text">%1$s pasos hoy. La Torre 61 se ha encendido y hay fuegos artificiales sobre District 9 hasta medianoche.</string>
+
+    <string name="profile_title">PERFIL · CÁLCULOS</string>
+    <string name="profile_height">ALTURA</string>
+    <string name="profile_weight">PESO</string>
+    <string name="profile_unset">sin definir</string>
+    <string name="profile_result">ZANCADA %1$s · %2$s KCAL / 1.000 PASOS</string>
+    <string name="profile_defaults">SIN DATOS: 0,75 M POR PASO Y 70 KG</string>
+    <string name="cd_profile">Perfil. Altura %1$s, peso %2$s. Toca fuera del panel para cerrarlo.</string>
+    <string name="cd_height_down">Bajar altura</string>
+    <string name="cd_height_up">Subir altura</string>
+    <string name="cd_weight_down">Bajar peso</string>
+    <string name="cd_weight_up">Subir peso</string>
+    <string name="cd_hud_action">Toca para ajustar tu altura y tu peso.</string>
+
+    <string name="widget_description">Tus pasos de hoy en neón, con la Torre 61 encendida al llegar a la meta.</string>
+    <string name="widget_kicker">NEON STEPS · D9</string>
+    <string name="widget_sample_steps">6.482</string>
+    <string name="widget_sample_percent">81%</string>
+    <string name="widget_sample_subtitle">PASOS HOY · META 8.000</string>
+    <string name="widget_subtitle">PASOS HOY · META %1$s</string>
+    <string name="widget_subtitle_done">META CUMPLIDA · %1$s</string>
+    <string name="widget_kicker_streak">NEON STEPS · RACHA %1$d</string>
 
     <string name="toast_permission_settings">Concede «Actividad física» en Ajustes para contar pasos.</string>
 </resources>

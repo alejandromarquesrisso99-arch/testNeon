@@ -12,7 +12,9 @@ enum class SensorMode { NONE, STEP_COUNTER, STEP_DETECTOR, ACCELEROMETER }
 
 enum class RainMode { AUTO, DRIZZLE, RAIN, DOWNPOUR }
 
-data class DayEntry(val date: LocalDate, val steps: Int)
+data class DayEntry(val date: LocalDate, val steps: Int, val goal: Int = 0) {
+    val metGoal: Boolean get() = goal in 1..steps
+}
 
 /**
  * Single source of truth for step data, shared in-process by the foreground service
@@ -53,7 +55,39 @@ class StepRepository internal constructor(
     var goal: Int
         get() = prefs.getInt(KEY_GOAL, DEFAULT_GOAL)
         set(value) {
-            prefs.edit().putInt(KEY_GOAL, value).apply()
+            // Each day remembers the goal it was played against, so streaks survive goal changes.
+            prefs.edit().putInt(KEY_GOAL, value).putInt(goalKey(today()), value).apply()
+            notifyListeners()
+        }
+
+    /** Height in cm, or 0 when not set. Drives the stride length. */
+    var heightCm: Int
+        get() = prefs.getInt(KEY_HEIGHT, 0)
+        set(value) {
+            prefs.edit().putInt(KEY_HEIGHT, value).apply()
+            notifyListeners()
+        }
+
+    /** Weight in kg, or 0 when not set. Drives the energy per step. */
+    var weightKg: Int
+        get() = prefs.getInt(KEY_WEIGHT, 0)
+        set(value) {
+            prefs.edit().putInt(KEY_WEIGHT, value).apply()
+            notifyListeners()
+        }
+
+    /** Walking stride: about 41.4 % of height, or an average stride when height isn't set. */
+    val strideMeters: Double
+        get() = heightCm.takeIf { it > 0 }?.let { it * STRIDE_PER_CM } ?: DEFAULT_STRIDE_METERS
+
+    /** Gross walking cost of ~0.75 kcal per kg per km, spread over the stride. */
+    val kcalPerStep: Double
+        get() = KCAL_PER_KG_KM * (weightKg.takeIf { it > 0 } ?: DEFAULT_WEIGHT_KG) * strideMeters / 1000.0
+
+    var soundOn: Boolean
+        get() = prefs.getBoolean(KEY_SOUND, false)
+        set(value) {
+            prefs.edit().putBoolean(KEY_SOUND, value).apply()
             notifyListeners()
         }
 
@@ -172,10 +206,41 @@ class StepRepository internal constructor(
     fun history(days: Int): List<DayEntry> {
         rollOverIfNeeded()
         val end = day
-        return (days - 1 downTo 0).map { back ->
-            val d = end.minusDays(back.toLong())
-            DayEntry(d, if (d == end) stepsToday else prefs.getInt(dayKey(d), 0))
+        return (days - 1 downTo 0).map { back -> entry(end.minusDays(back.toLong())) }
+    }
+
+    private fun entry(d: LocalDate): DayEntry {
+        val steps = if (d == day) stepsToday else prefs.getInt(dayKey(d), 0)
+        val goal = if (d == day) goal else prefs.getInt(goalKey(d), goal)
+        return DayEntry(d, steps, goal)
+    }
+
+    /**
+     * Consecutive days that met their goal, ending today if it's already met, otherwise
+     * yesterday: a streak stays alive until the day you skip is over.
+     */
+    fun streak(): Int {
+        rollOverIfNeeded()
+        var n = if (stepsToday >= goal) 1 else 0
+        var d = day.minusDays(1)
+        while (n < KEEP_DAYS && entry(d).metGoal) {
+            n++
+            d = d.minusDays(1)
         }
+        return n
+    }
+
+    /** A streak that ended yesterday (yesterday missed its goal), for the newswire; 0 if none. */
+    fun lostStreak(): Int {
+        rollOverIfNeeded()
+        if (stepsToday >= goal || entry(day.minusDays(1)).metGoal) return 0
+        var n = 0
+        var d = day.minusDays(2)
+        while (n < KEEP_DAYS && entry(d).metGoal) {
+            n++
+            d = d.minusDays(1)
+        }
+        return n
     }
 
     /** Write any pending changes immediately (e.g. when the service is destroyed). */
@@ -215,6 +280,7 @@ class StepRepository internal constructor(
         dirty = false
         prefs.edit()
             .putInt(dayKey(day), stepsToday)
+            .putInt(goalKey(day), goal)
             .putLong(KEY_LAST_COUNTER, lastCounter)
             .putInt(KEY_LAST_BOOT, lastBoot)
             .apply()
@@ -223,8 +289,12 @@ class StepRepository internal constructor(
     private fun pruneOldDays(now: LocalDate) {
         val cutoff = now.minusDays(KEEP_DAYS.toLong())
         val stale = prefs.all.keys.filter { key ->
-            key.startsWith(DAY_PREFIX) &&
-                runCatching { LocalDate.parse(key.removePrefix(DAY_PREFIX)) }.getOrNull()?.isBefore(cutoff) == true
+            val prefix = when {
+                key.startsWith(DAY_PREFIX) -> DAY_PREFIX
+                key.startsWith(GOAL_PREFIX) -> GOAL_PREFIX
+                else -> return@filter false
+            }
+            runCatching { LocalDate.parse(key.removePrefix(prefix)) }.getOrNull()?.isBefore(cutoff) == true
         }
         if (stale.isNotEmpty()) {
             prefs.edit().apply { stale.forEach(::remove) }.apply()
@@ -239,9 +309,11 @@ class StepRepository internal constructor(
         const val DEFAULT_GOAL = 8_000
         val GOAL_OPTIONS = intArrayOf(4_000, 6_000, 8_000, 10_000, 12_000, 15_000, 20_000)
 
-        /** Average walking stride and energy cost; good enough without asking for height/weight. */
-        const val STRIDE_METERS = 0.75
-        const val KCAL_PER_STEP = 0.04
+        /** Used until the user sets height and weight. */
+        const val DEFAULT_STRIDE_METERS = 0.75
+        const val DEFAULT_WEIGHT_KG = 70
+        private const val STRIDE_PER_CM = 0.00414
+        private const val KCAL_PER_KG_KM = 0.75
 
         private const val PREFS = "neon_steps"
         private const val DAY_PREFIX = "day_"
@@ -252,6 +324,10 @@ class StepRepository internal constructor(
         private const val KEY_GOAL_NOTIFIED = "goal_notified_on"
         private const val KEY_GOAL_CELEBRATED = "goal_celebrated_on"
         private const val KEY_HOTEL_FIXED = "hotel_fixed_on"
+        private const val KEY_HEIGHT = "height_cm"
+        private const val KEY_WEIGHT = "weight_kg"
+        private const val KEY_SOUND = "sound_on"
+        private const val GOAL_PREFIX = "daygoal_"
         private const val KEEP_DAYS = 60
         private const val PERSIST_DELAY_MS = 3_000L
         private const val CADENCE_SAMPLES = 128
@@ -259,6 +335,7 @@ class StepRepository internal constructor(
         private const val CADENCE_IDLE_MS = 8_000L
 
         private fun dayKey(date: LocalDate) = DAY_PREFIX + date
+        private fun goalKey(date: LocalDate) = GOAL_PREFIX + date
 
         @Volatile
         private var instance: StepRepository? = null

@@ -24,6 +24,7 @@ import com.district9.neonsteps.R
 import com.district9.neonsteps.data.SensorMode
 import com.district9.neonsteps.data.StepRepository
 import com.district9.neonsteps.util.Format
+import com.district9.neonsteps.widget.StepsWidget
 
 /**
  * Keeps a step sensor registered while the app is in the background. The hardware step
@@ -41,6 +42,7 @@ class StepCounterService : Service(), SensorEventListener {
     private val repoListener = StepRepository.Listener {
         maybeUpdateNotification()
         maybeNotifyGoal()
+        StepsWidget.refresh(this)
     }
 
     override fun onCreate() {
@@ -165,7 +167,7 @@ class StepCounterService : Service(), SensorEventListener {
             .setSmallIcon(R.drawable.ic_stat_steps)
             .setColor(getColor(R.color.neon_magenta))
             .setContentTitle(getString(R.string.notif_title, Format.steps(steps)))
-            .setContentText(getString(R.string.notif_text, Format.percent(steps, goal), Format.km(steps)))
+            .setContentText(getString(R.string.notif_text, Format.percent(steps, goal), Format.km(steps, repo.strideMeters)))
             .setContentIntent(open)
             .setOngoing(true)
             .setOnlyAlertOnce(true)

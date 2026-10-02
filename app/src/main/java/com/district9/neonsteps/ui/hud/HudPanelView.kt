@@ -64,7 +64,8 @@ class HudPanelView @JvmOverloads constructor(
         this.distance = distance
         this.kcal = kcal
         this.percent = percent
-        contentDescription = context.getString(R.string.cd_hud, time, distance, kcal, percent)
+        contentDescription = context.getString(R.string.cd_hud, time, distance, kcal, percent) + " " +
+            context.getString(R.string.cd_hud_action)
         invalidate()
     }
 

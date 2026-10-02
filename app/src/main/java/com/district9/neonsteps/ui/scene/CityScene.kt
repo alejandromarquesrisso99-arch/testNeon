@@ -4,6 +4,7 @@ import android.graphics.Canvas
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Shader
+import com.district9.neonsteps.data.StreakPerks
 import com.district9.neonsteps.ui.Neon
 import com.district9.neonsteps.ui.NeonFonts
 
@@ -46,6 +47,32 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
     private val ninjas = NinjaSquad(frame, sprites, maxShift * FRONT_PARALLAX)
     private var ichirakuFrom = -100f
 
+    // Streak perks.
+    private val fightSign = NeonSign.vertical(
+        frame, "ファイト", 0xFFFF8A1E.toInt(), 205f, 640f, 64f,
+        SignTemper(eventGap = 7f..18f), seed = 71,
+    ).apply { visible = false }
+    private val lanterns = Lanterns(frame, sprites)
+    private val airship = Airship(frame, sprites, fonts.mono)
+    private var lanternsOn = false
+    private var airshipOn = false
+
+    /** Days in a row meeting the goal; District 9 grows with it (see StreakPerks). */
+    var streak = 0
+        set(value) {
+            field = value
+            fightSign.visible = value >= StreakPerks.FIGHT_SIGN
+            val dango = value >= StreakPerks.DANGO_STALL
+            if (dango != market.dangoOpen) {
+                market.dangoOpen = dango
+                bakeReflection()
+            }
+            lanternsOn = value >= StreakPerks.LANTERNS
+            hologram.companion = value >= StreakPerks.SECOND_KOI
+            airshipOn = value >= StreakPerks.AIRSHIP
+            airship.message = "RACHA DE $value DÍAS · ファイト · DISTRICT 9 TE SALUDA"
+        }
+
     private val signs: List<NeonSign> = listOf(
         NeonSign.vertical(
             frame, "チカムスサロ", 0xFF9B5CFF.toInt(), 792f, 412f, 72f,
@@ -66,6 +93,7 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
             frame, "ラメン", Neon.MAGENTA, 1064f, 700f, 72f,
             SignTemper(eventGap = 4f..10f), seed = 67,
         ),
+        fightSign,
     )
 
     private val skyPaint = Paint().apply {
@@ -278,6 +306,8 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
         market.update(dt)
         pedestrians.update(dt, frame.width)
         ninjas.update(dt)
+        if (lanternsOn) lanterns.update(dt)
+        if (airshipOn) airship.update(dt)
         rain.update(dt)
         lightning.update(dt)
         fireworks.update(dt)
@@ -325,12 +355,14 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
         // In its beam the koi swims behind the street front; loose and golden, it flies over it.
         val koiInFront = hologram.freedom > 0.5f
         if (!koiInFront) hologram.drawKoi(canvas, t, layerDx[2], late)
+        if (airshipOn) airship.draw(canvas, camera * 0.25f)
         skyline.drawLayer(canvas, 3, near, b)
         skyline.drawBeacons(canvas, sprites, t, layerDx, Blackout.power(b, 0.85f))
 
         for (s in signs) s.drawWash(canvas, sprites, near)
         for (s in signs) s.draw(canvas, near)
         signSparks.draw(canvas, near)
+        if (lanternsOn) lanterns.draw(canvas, near)
         if (koiInFront) hologram.drawKoi(canvas, t, layerDx[2], late)
 
         street.drawGround(canvas)

@@ -76,6 +76,11 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
+    <com.district9.neonsteps.ui.hud.ProfileView
+        android:id="@+id/profile"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
     <com.district9.neonsteps.ui.hud.FxOverlayView
         android:id="@+id/fx"
         android:layout_width="match_parent"

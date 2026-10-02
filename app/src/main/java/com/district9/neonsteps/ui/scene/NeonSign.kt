@@ -57,6 +57,11 @@ internal object KanaGlyphs {
         'ラ' to arrayOf(floatArrayOf(0.24f, 0.14f, 0.76f, 0.14f), floatArrayOf(0.14f, 0.38f, 0.84f, 0.38f, 0.74f, 0.66f, 0.42f, 0.9f)),
         'メ' to arrayOf(floatArrayOf(0.78f, 0.12f, 0.6f, 0.5f, 0.2f, 0.9f), floatArrayOf(0.3f, 0.36f, 0.84f, 0.8f)),
         'ー' to arrayOf(floatArrayOf(0.12f, 0.5f, 0.88f, 0.5f)),
+        // ファイト ("faito", go for it!) for the streak sign.
+        'フ' to arrayOf(floatArrayOf(0.16f, 0.2f, 0.82f, 0.2f, 0.74f, 0.5f, 0.56f, 0.74f, 0.3f, 0.92f)),
+        'ァ' to arrayOf(floatArrayOf(0.28f, 0.45f, 0.8f, 0.45f, 0.66f, 0.6f), floatArrayOf(0.56f, 0.54f, 0.52f, 0.72f, 0.38f, 0.9f)),
+        'イ' to arrayOf(floatArrayOf(0.72f, 0.12f, 0.2f, 0.56f), floatArrayOf(0.56f, 0.38f, 0.56f, 0.92f)),
+        'ト' to arrayOf(floatArrayOf(0.38f, 0.1f, 0.38f, 0.92f), floatArrayOf(0.38f, 0.45f, 0.8f, 0.64f)),
         // 一楽 ("Ichiraku"), for the ramen stand's secret name.
         '一' to arrayOf(floatArrayOf(0.08f, 0.52f, 0.92f, 0.48f)),
         '楽' to arrayOf(

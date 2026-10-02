@@ -120,6 +120,15 @@ class SceneView @JvmOverloads constructor(
             context.getSystemService(Vibrator::class.java)
         }
 
+    private var streak = 0
+
+    /** Days in a row meeting the goal: District 9 grows with it. */
+    fun setStreak(days: Int) {
+        if (days == streak) return
+        streak = days
+        scene?.streak = days
+    }
+
     /** The HOTEL's "L" stays fixed for the rest of the day once someone fixes it. */
     fun setHotelFixed(value: Boolean) {
         hotelFixed = value
@@ -175,6 +184,7 @@ class SceneView @JvmOverloads constructor(
             s.activity = activity
             s.celebrating = celebrating
             s.hotelFixed = hotelFixed
+            s.streak = streak
             if (pendingCelebration) {
                 s.celebrate()
                 pendingCelebration = false

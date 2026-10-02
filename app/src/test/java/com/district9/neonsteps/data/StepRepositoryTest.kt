@@ -103,6 +103,56 @@ class StepRepositoryTest {
     }
 
     @Test
+    fun profileDrivesStrideAndEnergy() {
+        val repo = repo()
+        assertEquals(0.75, repo.strideMeters, 1e-9)
+        assertEquals(0.039375, repo.kcalPerStep, 1e-9) // 70 kg over a 0.75 m stride
+        repo.heightCm = 180
+        repo.weightKg = 90
+        assertEquals(0.7452, repo.strideMeters, 1e-9)
+        assertEquals(0.75 * 90 * 0.7452 / 1000, repo.kcalPerStep, 1e-9)
+    }
+
+    @Test
+    fun streakCountsDaysThatMetTheirOwnGoal() {
+        val repo = repo()
+        repo.goal = 5_000
+        // Three days ago: met. Two days ago: met under a lower goal of the day. Yesterday: met.
+        repeat(3) { back ->
+            today = LocalDate.of(2026, 10, 2).minusDays((3 - back).toLong())
+            repo.goal = if (back == 1) 3_000 else 5_000
+            repo.addSteps(if (back == 1) 3_500 else 6_000)
+            repo.flush()
+        }
+        today = LocalDate.of(2026, 10, 2)
+        repo.goal = 5_000
+        // Today isn't met yet, but the streak is still alive.
+        assertEquals(3, repo.streak())
+        repo.addSteps(5_000)
+        assertEquals(4, repo.streak())
+    }
+
+    @Test
+    fun aMissedDayBreaksTheStreakAndIsReportedOnce() {
+        val repo = repo()
+        repo.goal = 4_000
+        for (back in 4 downTo 2) {
+            today = LocalDate.of(2026, 10, 2).minusDays(back.toLong())
+            repo.addSteps(4_500)
+            repo.flush()
+        }
+        today = LocalDate.of(2026, 10, 2).minusDays(1)
+        repo.addSteps(1_000) // yesterday fell short
+        repo.flush()
+        today = LocalDate.of(2026, 10, 2)
+        assertEquals(0, repo.streak())
+        assertEquals(3, repo.lostStreak())
+        repo.addSteps(4_000)
+        assertEquals(1, repo.streak())
+        assertEquals(0, repo.lostStreak())
+    }
+
+    @Test
     fun cadenceReflectsRecentStepsAndDecays() {
         val repo = repo()
         repeat(60) {

@@ -96,7 +96,10 @@ class HistoryView @JvmOverloads constructor(
 
     private fun sp(v: Float) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, v, resources.displayMetrics)
 
-    fun setData(days: List<DayEntry>, goal: Int) {
+    private var streak = 0
+
+    fun setData(days: List<DayEntry>, goal: Int, streak: Int = this.streak) {
+        this.streak = streak
         this.days = days
         this.goal = goal
         if (selected !in days.indices) selected = days.lastIndex
@@ -161,11 +164,12 @@ class HistoryView @JvmOverloads constructor(
         val values = days.map { it.steps }
         val avg = if (values.isEmpty()) 0 else values.sum() / values.size
         val best = values.maxOrNull() ?: 0
-        val hits = values.count { it >= goal }
+        val hits = days.count { it.metGoal }
         val stats = listOf(
             context.getString(R.string.history_avg) to Format.steps(avg),
             context.getString(R.string.history_best) to Format.steps(best),
             context.getString(R.string.history_goal_days) to "$hits/${values.size}",
+            context.getString(R.string.history_streak) to streak.toString(),
         )
         val colW = (r - l) / stats.size
         stats.forEachIndexed { i, (label, value) ->

@@ -46,6 +46,17 @@ class HeaderView @JvmOverloads constructor(
         color = Neon.CYAN
     }
     private val kickerPlace = Paint(kickerBrand).apply { color = Neon.TEXT_DIM }
+    private val streakPaint = Paint(kickerBrand).apply {
+        color = 0xFFFF8A1E.toInt()
+        letterSpacing = 0.2f
+    }
+    private var streak = 0
+
+    fun setStreak(days: Int) {
+        if (days == streak) return
+        streak = days
+        invalidate()
+    }
     private val title = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         typeface = fonts.black
         letterSpacing = -0.01f
@@ -142,7 +153,16 @@ class HeaderView @JvmOverloads constructor(
         val brand = context.getString(R.string.kicker_brand)
         val bx = left + lineW + 14f * dp
         canvas.drawText(brand, bx, y, kickerBrand)
-        canvas.drawText(context.getString(R.string.kicker_place), bx + kickerBrand.measureText(brand) + 6f * dp, y, kickerPlace)
+        val placeX = bx + kickerBrand.measureText(brand) + 6f * dp
+        if (streak > 0) {
+            // A streak takes the place of "· DISTRICT 9", in orange.
+            val free = right - placeX
+            val long = "· " + context.resources.getQuantityString(R.plurals.streak_days, streak, streak)
+            val text = if (streakPaint.measureText(long) <= free) long else "· " + context.getString(R.string.streak_short, streak)
+            canvas.drawText(text, placeX, y, streakPaint)
+        } else {
+            canvas.drawText(context.getString(R.string.kicker_place), placeX, y, kickerPlace)
+        }
 
         // Title: the step count with chromatic aberration and the occasional glitch.
         y += gapKicker + capHeight(title)

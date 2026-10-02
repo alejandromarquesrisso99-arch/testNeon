@@ -135,9 +135,9 @@ class EasterEggTest {
 
     @Test
     fun caloriesAreCountedInRamenBowls() {
-        assertEquals("0,0 CUENCOS", com.district9.neonsteps.util.Format.ramenBowls(0))
-        assertEquals("1,0 CUENCO", com.district9.neonsteps.util.Format.ramenBowls(13_750))
-        assertEquals("0,6 CUENCOS", com.district9.neonsteps.util.Format.ramenBowls(8_000))
+        assertEquals("0,0 CUENCOS", com.district9.neonsteps.util.Format.ramenBowls(0, 0.04))
+        assertEquals("1,0 CUENCO", com.district9.neonsteps.util.Format.ramenBowls(13_750, 0.04))
+        assertEquals("0,6 CUENCOS", com.district9.neonsteps.util.Format.ramenBowls(8_000, 0.04))
     }
 
     @Test

@@ -41,6 +41,21 @@ compilada en otro ordenador, desinstala antes la anterior.
 - El noticiero **D9 WIRE** comenta tu caminata (y el letrero del HOTEL, que sigue sin su «L»).
 - Inclinar el móvil también desplaza un poco las capas.
 
+<details>
+<summary><b>Easter eggs</b> (spoilers)</summary>
+
+- **El HOTEL tiene arreglo**: toca 5 veces seguidas la «L» apagada. Chisporrotea, falla... y
+  al quinto toque prende con una lluvia de chispas. Dura hasta medianoche; al día siguiente
+  vuelve a fallar, claro.
+- **Koi dorado**: toca 3 veces el koi holográfico. Se escapa del haz de la Torre 61, se vuelve
+  dorado y vuela por todo el cielo durante un minuto dejando purpurina («SEÑAL PERDIDA»).
+- **Apagón**: mantén pulsado el número de pasos. District 9 se queda a oscuras (solo brillan la
+  lluvia, los paraguas y tus pasos) y luego vuelve la luz a trozos, con los neones arrancando
+  a trompicones.
+
+El noticiero D9 WIRE da la exclusiva de cada uno.
+</details>
+
 ## Cómo cuenta
 
 - Usa el **podómetro de hardware** (`TYPE_STEP_COUNTER`) desde un servicio en primer plano

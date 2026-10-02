@@ -4,6 +4,7 @@ import android.graphics.Canvas
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
 import com.district9.neonsteps.ui.Neon
@@ -15,9 +16,16 @@ import kotlin.math.sin
 
 /**
  * The wireframe holographic koi swimming above Tower 61 inside its projector beam.
- * Walking speeds it up: the koi feeds on footsteps.
+ * Walking speeds it up: the koi feeds on footsteps. Tapped three times, it slips the beam
+ * and roams the sky as a golden koi for a minute, shedding glitter.
  */
-internal class Hologram(private val frame: SceneFrame, mono: Typeface, private val projX: Float, private val projY: Float) {
+internal class Hologram(
+    private val frame: SceneFrame,
+    mono: Typeface,
+    private val projX: Float,
+    private val projY: Float,
+    private val sprites: Sprites,
+) {
     private val length = frame.s(190f)
 
     private val conePath = Path()
@@ -52,6 +60,7 @@ internal class Hologram(private val frame: SceneFrame, mono: Typeface, private v
     private var swimPhase = 0f
     private var travel = 0f
     private var speed = 1f
+    private var kick = 0f
     private var glitchUntil = 0f
     private var glitchDx = 0f
     private val rng = Rng(1000)
@@ -60,6 +69,31 @@ internal class Hologram(private val frame: SceneFrame, mono: Typeface, private v
     private val coneTopY = frame.y(525f)
     private val coneLeft = frame.x(342f)
     private val coneRight = frame.x(762f)
+
+    // Where the koi is (before parallax) and how fast it's moving sideways.
+    private var kx = beamX(0f)
+    private var ky = beamY(0f)
+    private var kvx = -1f
+
+    // 0 = projected cyan koi in its beam … 1 = golden koi loose in the sky.
+    private var gold = 0f
+    private var goldenUntil = -1f
+    private var wildPhase = 0f
+    private var glitterDebt = 0f
+    private val skyTop = frame.height * 0.2f
+    private val skyBottom = maxOf(frame.y(600f), skyTop + frame.s(120f))
+
+    /** Golden glitter trail, in sky coordinates. */
+    val glitter = Sparks(frame, 160)
+
+    /** The koi's on-screen hit box (parallax included), refreshed every frame. */
+    val koiRect = RectF()
+
+    /** Out of the beam, or still swimming back to it. */
+    fun isLoose(t: Float): Boolean = t < goldenUntil || gold > 0f
+
+    /** How much the koi has left the beam (0..1), for draw ordering. */
+    val freedom: Float get() = gold
 
     init {
         conePath.moveTo(projX, projY)
@@ -78,11 +112,52 @@ internal class Hologram(private val frame: SceneFrame, mono: Typeface, private v
         )
     }
 
+    private fun beamX(tr: Float) = frame.x(655f) + frame.s(62f) * sin(tr)
+    private fun beamY(tr: Float) = frame.y(405f) + frame.s(24f) * sin(tr * 2f + 0.8f)
+
+    /** A tap on the koi: it glitches and darts. */
+    fun poke(t: Float) {
+        glitchUntil = t + 0.18f
+        glitchDx = frame.s(rng.range(-14f, 14f))
+        kick = 2.2f
+    }
+
+    /** Let the koi out of the beam for [seconds]. */
+    fun release(t: Float, seconds: Float) {
+        goldenUntil = t + seconds
+    }
+
     /** @param activity 0 when standing still, 1 at a brisk walk. */
     fun update(t: Float, dt: Float, activity: Float) {
+        kick = (kick - dt * 2.5f).coerceAtLeast(0f)
         speed += ((1f + 1.6f * activity) - speed) * (dt * 1.5f).coerceAtMost(1f)
-        swimPhase += dt * 1.1f * speed
-        travel += dt * 0.32f * speed
+        val pace = speed + kick
+        val freeTarget = if (t < goldenUntil) 1f else 0f
+        gold += (freeTarget - gold).coerceIn(-dt / 1.8f, dt / 1.8f)
+        swimPhase += dt * 1.1f * pace * (1f + 1.3f * gold)
+        travel += dt * 0.32f * pace
+        if (gold > 0f) wildPhase += dt * 0.5f * pace
+
+        // Blend from the beam orbit to a Lissajous loop across the whole sky.
+        val e = smoothstep(0f, 1f, gold)
+        val wx = frame.width / 2f + frame.width * 0.36f * sin(wildPhase * 0.9f + 0.6f)
+        val wy = (skyTop + skyBottom) / 2f + (skyBottom - skyTop) / 2f * sin(wildPhase * 1.7f)
+        val nx = lerp(beamX(travel), wx, e)
+        val ny = lerp(beamY(travel), wy, e)
+        if (dt > 0f) kvx += ((nx - kx) / dt - kvx) * (dt * 8f).coerceAtMost(1f)
+        kx = nx
+        ky = ny
+
+        if (gold > 0.15f) {
+            glitterDebt += dt * 40f * gold
+            val dir = if (kvx < 0f) 1f else -1f // the tail trails behind the swim direction
+            while (glitterDebt >= 1f) {
+                glitterDebt -= 1f
+                glitter.emit(kx + dir * length * 0.45f, ky, 1, if (rng.chance(0.3f)) 0xFFFFFFFF.toInt() else GOLD, frame.s(40f), frame.s(60f), 1.4f, up = false)
+            }
+        }
+        glitter.update(dt)
+
         if (t >= nextGlitch) {
             glitchUntil = t + rng.range(0.05f, 0.16f)
             glitchDx = frame.s(rng.range(-9f, 9f))
@@ -90,46 +165,71 @@ internal class Hologram(private val frame: SceneFrame, mono: Typeface, private v
         }
     }
 
-    fun draw(canvas: Canvas, t: Float, dx: Float) {
-        val glitching = t < glitchUntil
-        val flick = if (glitching) 0.55f else 0.86f + 0.14f * noise1(t * 9f, 7)
+    /** Refresh the tap target for the current parallax offset [dx] (same placement as [drawKoi]). */
+    fun updateHitBox(dx: Float) {
+        val x = kx + lerp(dx, dx * 0.2f, gold)
+        koiRect.set(x - length * 0.55f, ky - length * 0.3f, x + length * 0.55f, ky + length * 0.3f)
+    }
 
-        // The wide projection cone with its caption, then the narrow beam feeding the koi.
+    private fun flicker(t: Float) = if (t < glitchUntil) 0.55f else 0.86f + 0.14f * noise1(t * 9f, 7)
+
+    /** Projection cone, caption, the beam feeding the koi and the projector itself. */
+    fun drawProjection(canvas: Canvas, t: Float, dx: Float, power: Float) {
+        val f = flicker(t) * power
         canvas.save()
         canvas.translate(dx, 0f)
-        conePaint.alpha = (255 * flick).toInt()
+        conePaint.alpha = (255 * f).toInt()
         canvas.drawPath(conePath, conePaint)
+        coneEdge.alpha = (90 * f).toInt()
         canvas.drawLine(coneLeft, coneTopY, coneRight, coneTopY, coneEdge)
-        canvas.drawText("KOI-61 · NIGHT 1000", frame.x(376f), coneTopY + frame.s(40f), captionPaint)
+        captionPaint.alpha = (140 * f).toInt()
+        val caption = if (gold > 0.5f) "KOI-61 · SEÑAL PERDIDA" else "KOI-61 · NIGHT 1000"
+        canvas.drawText(caption, frame.x(376f), coneTopY + frame.s(40f), captionPaint)
 
-        val cx = frame.x(655f) + frame.s(62f) * sin(travel)
-        val cy = frame.y(405f) + frame.s(24f) * sin(travel * 2f + 0.8f)
-        val vx = cos(travel)
-        beamPath.reset()
-        beamPath.moveTo(projX - frame.s(5f), projY)
-        beamPath.lineTo(cx - length * 0.42f, cy + frame.s(30f))
-        beamPath.lineTo(cx + length * 0.42f, cy + frame.s(30f))
-        beamPath.lineTo(projX + frame.s(5f), projY)
-        beamPath.close()
-        beamPaint.alpha = (255 * flick).toInt()
-        canvas.drawPath(beamPath, beamPaint)
+        val beamAlpha = f * (1f - smoothstep(0f, 0.6f, gold))
+        if (beamAlpha > 0.01f) {
+            beamPath.reset()
+            beamPath.moveTo(projX - frame.s(5f), projY)
+            beamPath.lineTo(kx - length * 0.42f, ky + frame.s(30f))
+            beamPath.lineTo(kx + length * 0.42f, ky + frame.s(30f))
+            beamPath.lineTo(projX + frame.s(5f), projY)
+            beamPath.close()
+            beamPaint.alpha = (255 * beamAlpha).toInt()
+            canvas.drawPath(beamPath, beamPaint)
+        }
 
-        // Projector housing with its lens.
         canvas.drawRect(projX - frame.s(14f), projY - frame.s(3f), projX + frame.s(14f), projY + frame.s(10f), projectorPaint)
         wire.strokeWidth = frame.s(3f)
-        wire.color = Neon.alpha(Neon.CYAN, 0.9f * flick)
+        wire.color = Neon.alpha(Neon.CYAN, 0.9f * f)
         canvas.drawLine(projX - frame.s(8f), projY - frame.s(2f), projX + frame.s(8f), projY - frame.s(2f), wire)
         canvas.restore()
+    }
+
+    /**
+     * The koi itself. A blackout kills the projection ([power]), but a golden koi has slipped
+     * the projector and keeps shining.
+     */
+    fun drawKoi(canvas: Canvas, t: Float, dx: Float, power: Float) {
+        // Loose in the sky it follows the far parallax, not Tower 61's.
+        val x = kx + lerp(dx, dx * 0.2f, gold) + if (t < glitchUntil) glitchDx else 0f
+        val f = flicker(t) * maxOf(power, smoothstep(0.3f, 1f, gold))
+        glitter.draw(canvas, lerp(dx, dx * 0.2f, gold))
+        if (f <= 0.01f) return
+
+        if (gold > 0f) sprites.drawBlob(canvas, x, ky, length * 0.9f, length * 0.55f, GOLD, 0.22f * gold * f)
 
         // Facing follows the swim direction; near the turn the koi is seen head-on.
-        val facing = -vx
+        val facing = -kvx / (abs(kvx) + frame.s(25f))
         val squash = (0.16f + 0.84f * abs(facing).pow(0.3f)) * if (facing >= 0f) 1f else -1f
-        buildWireframe(cx + dx + (if (glitching) glitchDx else 0f), cy, squash)
+        buildWireframe(x, ky, squash)
 
-        drawLines(canvas, frame.s(6f), Neon.alpha(Neon.CYAN, 0.10f * flick), 0f, 0f)
-        drawLines(canvas, frame.s(1.8f), Neon.alpha(Neon.MAGENTA, 0.65f * flick), frame.s(3.5f), frame.s(1.5f))
-        drawLines(canvas, frame.s(1.8f), Neon.alpha(Neon.CYAN, 0.9f * flick), -frame.s(2f), 0f)
-        drawLines(canvas, frame.s(0.9f), Neon.alpha(0xFFE6FDFF.toInt(), 0.75f * flick), -frame.s(1f), 0f)
+        val main = Neon.mix(Neon.CYAN, GOLD, gold)
+        val chroma = Neon.mix(Neon.MAGENTA, 0xFFFF7A2E.toInt(), gold)
+        val core = Neon.mix(0xFFE6FDFF.toInt(), 0xFFFFF6DC.toInt(), gold)
+        drawLines(canvas, frame.s(6f), Neon.alpha(main, (0.10f + 0.12f * gold) * f), 0f, 0f)
+        drawLines(canvas, frame.s(1.8f), Neon.alpha(chroma, 0.65f * f), frame.s(3.5f), frame.s(1.5f))
+        drawLines(canvas, frame.s(1.8f), Neon.alpha(main, 0.9f * f), -frame.s(2f), 0f)
+        drawLines(canvas, frame.s(0.9f), Neon.alpha(core, 0.75f * f), -frame.s(1f), 0f)
     }
 
     private fun drawLines(canvas: Canvas, width: Float, color: Int, ox: Float, oy: Float) {
@@ -220,5 +320,9 @@ internal class Hologram(private val frame: SceneFrame, mono: Typeface, private v
         lines[lineCount++] = y0
         lines[lineCount++] = x1
         lines[lineCount++] = y1
+    }
+
+    private companion object {
+        const val GOLD = 0xFFFFC94A.toInt()
     }
 }

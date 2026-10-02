@@ -19,13 +19,20 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
     private val frontMargin = maxShift * FRONT_PARALLAX + frame.s(40f)
 
     private val skyline = Skyline(frame, maxShift, fonts.bold)
-    private val hologram = Hologram(frame, fonts.mono, skyline.projectorX, skyline.projectorY)
+    private val hologram = Hologram(frame, fonts.mono, skyline.projectorX, skyline.projectorY, sprites)
     private val market = Market(frame, sprites, frontMargin)
     private val pedestrians = Pedestrians(frame, sprites, maxShift * FRONT_PARALLAX)
     private val street = WetStreet(frame, frontMargin)
     private val rain = Rain(frame)
     private val lightning = Lightning(frame)
     private val fireworks = Fireworks(frame, sprites)
+    private val signSparks = Sparks(frame)
+
+    /** The HOTEL sign whose "L" never lights, unless someone fixes it. */
+    private val hotel = NeonSign.word(
+        frame, "HOTEL", 0xFF3FD0E0.toInt(), fonts.bold, 92f, 1063f, 333f, 1155f,
+        SignTemper(baseLevel = 0.6f, eventGap = 6f..16f, darkGlyphs = setOf(4)), seed = 31,
+    )
 
     private val signs: List<NeonSign> = listOf(
         NeonSign.vertical(
@@ -36,10 +43,7 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
             frame, "コリホモンエ", Neon.CYAN, 335f, 665f, 73f,
             SignTemper(eventGap = 5f..14f, deadGlyphs = setOf(3)), seed = 23,
         ),
-        NeonSign.word(
-            frame, "HOTEL", 0xFF3FD0E0.toInt(), fonts.bold, 92f, 1063f, 333f, 1155f,
-            SignTemper(baseLevel = 0.6f, eventGap = 6f..16f, darkGlyphs = setOf(4)), seed = 31,
-        ),
+        hotel,
         NeonSign.vertical(
             frame, "ステップ", Neon.YELLOW, 817f, 866f, 73f,
             SignTemper(eventGap = 6f..15f, glyphDropGap = 9f..24f), seed = 47,
@@ -105,6 +109,77 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
 
     fun strike(strength: Float) = lightning.strike(strength)
 
+    // --- Easter eggs -------------------------------------------------------------------------
+
+    enum class Tap { NONE, CONSUMED, HOTEL_FIXED, GOLDEN_KOI }
+
+    private var hotelTaps = 0
+    private var lastHotelTap = -10f
+    private var koiTaps = 0
+    private var lastKoiTap = -10f
+    private var blackoutT = -1f
+    private val hitRect = android.graphics.RectF()
+
+    /** Whether the HOTEL's "L" is fixed (it is, for the rest of the day, once someone fixes it). */
+    var hotelFixed: Boolean
+        get() = hotel.isRepaired
+        set(value) {
+            if (value && !hotel.isRepaired) hotel.repair(time, animate = false)
+            if (!value && hotel.isRepaired) hotel.unrepair()
+        }
+
+    val blackoutRunning: Boolean get() = blackoutT >= 0f
+
+    /** Lights out across District 9; only the rain, the umbrellas and your steps keep glowing. */
+    fun blackout() {
+        if (blackoutT < 0f) blackoutT = 0f
+    }
+
+    /** Screen hit boxes of the HOTEL's "L" and the koi, for tests. */
+    fun debugTargets(): Pair<android.graphics.RectF, android.graphics.RectF>? {
+        val l = hotel.darkElementBounds() ?: return null
+        return android.graphics.RectF(l).apply { offset(layerDx[3], 0f) } to android.graphics.RectF(hologram.koiRect)
+    }
+
+    /** Taps on the koi or the HOTEL's dead "L" feed their easter eggs instead of calling lightning. */
+    fun tap(x: Float, y: Float): Tap {
+        val t = time
+        if (hologram.koiRect.width() > 0f) {
+            hitRect.set(hologram.koiRect)
+            hitRect.inset(-frame.s(30f), -frame.s(30f))
+            if (hitRect.contains(x, y)) {
+                hologram.poke(t)
+                if (hologram.isLoose(t)) return Tap.CONSUMED
+                koiTaps = if (t - lastKoiTap > TAP_WINDOW) 1 else koiTaps + 1
+                lastKoiTap = t
+                if (koiTaps >= 3) {
+                    koiTaps = 0
+                    hologram.release(t, GOLDEN_KOI_SECONDS)
+                    return Tap.GOLDEN_KOI
+                }
+                return Tap.CONSUMED
+            }
+        }
+        val l = hotel.darkElementBounds() ?: return Tap.NONE
+        if (hotel.isRepaired) return Tap.NONE
+        val near = layerDx[3]
+        hitRect.set(l.left + near, l.top, l.right + near, l.bottom)
+        hitRect.inset(-frame.s(34f), -frame.s(34f))
+        if (!hitRect.contains(x, y)) return Tap.NONE
+        hotelTaps = if (t - lastHotelTap > TAP_WINDOW) 1 else hotelTaps + 1
+        lastHotelTap = t
+        // Each tap shorts the tube: it spits sparks and fails to strike...
+        hotel.poke(t)
+        signSparks.emit(l.centerX(), l.top + frame.s(6f), 5 + hotelTaps * 2, 0xFF9FF6FF.toInt(), frame.s(260f), frame.s(1100f), 0.6f)
+        if (hotelTaps < 5) return Tap.CONSUMED
+        // ...until the fifth, when it catches with a shower of sparks onto the street.
+        hotelTaps = 0
+        hotel.repair(t, animate = true)
+        signSparks.emit(l.centerX(), l.top, 70, 0xFFBFF8FF.toInt(), frame.s(460f), frame.s(1200f), 1.1f)
+        signSparks.emit(l.centerX(), l.bottom, 30, Neon.YELLOW, frame.s(300f), frame.s(1200f), 1f, up = false)
+        return Tap.HOTEL_FIXED
+    }
+
     /** The moment the goal falls: a double lightning strike and an opening salvo. */
     fun celebrate() {
         celebrating = true
@@ -135,9 +210,19 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
         for (i in 0 until 4) layerDx[i] = camera * skyline.layers[i].parallax
 
         rain.intensity += (rainTarget - rain.intensity) * (dt * 0.8f).coerceAtMost(1f)
+        if (blackoutT >= 0f) {
+            blackoutT += dt
+            if (blackoutT > Blackout.TOTAL) blackoutT = -1f
+        }
         skyline.update(t)
-        for (s in signs) s.update(t)
+        for ((i, s) in signs.withIndex()) {
+            // Signs restart in a staggered order after a blackout.
+            s.powerScale = Blackout.power(blackoutT, 0.15f + 0.55f * i / signs.size)
+            s.update(t)
+        }
+        signSparks.update(dt)
         hologram.update(t, dt, activity)
+        hologram.updateHitBox(layerDx[2])
         market.update(dt)
         pedestrians.update(dt, frame.width)
         rain.update(dt)
@@ -169,29 +254,38 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
             val x = ((smogX[i] * w + smogSpeed[i] * frame.s(1f) * t + camera * 0.05f) % span + span) % span - frame.s(300f)
             sprites.drawBlob(canvas, x, frame.y(smogY[i]), frame.s(smogR[i]), frame.s(smogR[i] * 0.45f), smogC[i], 0.42f)
         }
-        sprites.drawBlob(canvas, w / 2f, frame.y(1180f), w * 0.85f, frame.s(300f), 0xFF8A1A70.toInt(), 0.32f)
+        // The city's own glow on the smog goes out with the grid.
+        val cityGlow = Blackout.power(blackoutT, 0.4f)
+        sprites.drawBlob(canvas, w / 2f, frame.y(1180f), w * 0.85f, frame.s(300f), 0xFF8A1A70.toInt(), 0.32f * (0.35f + 0.65f * cityGlow))
         if (fireworks.hasSomethingToDraw) fireworks.draw(canvas, camera * 0.06f)
         lightning.drawSky(canvas)
 
-        skyline.drawLayer(canvas, 0, layerDx[0])
-        skyline.drawLayer(canvas, 1, layerDx[1])
-        skyline.drawLayer(canvas, 2, layerDx[2])
-        skyline.drawTowerLights(canvas, sprites, t, layerDx[2], towerLevel)
-        skyline.drawTowerLabel(canvas, t, layerDx[2], towerLevel)
-        hologram.draw(canvas, t, layerDx[2])
-        skyline.drawLayer(canvas, 3, near)
-        skyline.drawBeacons(canvas, sprites, t, layerDx)
+        val b = blackoutT
+        val late = Blackout.power(b, 0.95f) // Tower 61 and its projector come back last
+        skyline.drawLayer(canvas, 0, layerDx[0], b)
+        skyline.drawLayer(canvas, 1, layerDx[1], b)
+        skyline.drawLayer(canvas, 2, layerDx[2], b)
+        skyline.drawTowerLights(canvas, sprites, t, layerDx[2], towerLevel * late)
+        skyline.drawTowerLabel(canvas, t, layerDx[2], towerLevel, late)
+        hologram.drawProjection(canvas, t, layerDx[2], late)
+        // In its beam the koi swims behind the street front; loose and golden, it flies over it.
+        val koiInFront = hologram.freedom > 0.5f
+        if (!koiInFront) hologram.drawKoi(canvas, t, layerDx[2], late)
+        skyline.drawLayer(canvas, 3, near, b)
+        skyline.drawBeacons(canvas, sprites, t, layerDx, Blackout.power(b, 0.85f))
 
         for (s in signs) s.drawWash(canvas, sprites, near)
         for (s in signs) s.draw(canvas, near)
+        signSparks.draw(canvas, near)
+        if (koiInFront) hologram.drawKoi(canvas, t, layerDx[2], late)
 
         street.drawGround(canvas)
-        street.drawReflection(canvas, t, front, signs, near) { c ->
-            market.drawBulbs(c, t, front, 0.5f)
+        street.drawReflection(canvas, t, front, signs, near, Blackout.power(b, 0.5f)) { c ->
+            market.drawBulbs(c, t, front, 0.5f, b)
             pedestrians.draw(c, front, 0.28f)
         }
         street.drawKerb(canvas)
-        market.drawStalls(canvas, t, front)
+        market.drawStalls(canvas, t, front, b)
         market.drawSteam(canvas, front)
         pedestrians.draw(canvas, front)
 
@@ -203,5 +297,9 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
     private companion object {
         /** The market and pedestrians are in front of the near towers, so they move further still. */
         const val FRONT_PARALLAX = 1.2f
+
+        /** Max seconds between taps that still count toward an easter egg. */
+        const val TAP_WINDOW = 1.6f
+        const val GOLDEN_KOI_SECONDS = 60f
     }
 }

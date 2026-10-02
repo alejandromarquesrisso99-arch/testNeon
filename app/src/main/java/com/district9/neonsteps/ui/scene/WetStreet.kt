@@ -99,8 +99,13 @@ internal class WetStreet(private val frame: SceneFrame, private val margin: Floa
      * @param signs mirrored live, so their flicker plays in the puddles.
      * @param dynamic extra live content (e.g. umbrellas) drawn mirrored, unrippled.
      */
-    fun drawReflection(canvas: Canvas, t: Float, dx: Float, signs: List<NeonSign>, signDx: Float, dynamic: (Canvas) -> Unit) {
+    fun drawReflection(
+        canvas: Canvas, t: Float, dx: Float, signs: List<NeonSign>, signDx: Float,
+        power: Float = 1f, dynamic: (Canvas) -> Unit,
+    ) {
         val w = frame.width.toFloat()
+        // The baked reflection holds lit windows and stalls: it fades with the grid.
+        reflPaint.alpha = (255 * (0.2f + 0.8f * power)).toInt()
         for (i in 0 until strips) {
             val y0 = stripY[i]
             val y1 = stripY[i + 1]

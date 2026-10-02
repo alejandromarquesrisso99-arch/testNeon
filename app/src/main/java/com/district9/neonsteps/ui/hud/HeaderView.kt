@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.RectF
 import android.graphics.Shader
 import android.os.SystemClock
 import android.util.AttributeSet
@@ -109,6 +110,12 @@ class HeaderView @JvmOverloads constructor(
     private fun sp(v: Float) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, v, resources.displayMetrics)
 
     private fun capHeight(p: Paint) = -p.fontMetrics.ascent * 0.72f
+
+    /** The band the big step count occupies, in this view's coordinates. */
+    fun titleBand(out: RectF) {
+        val top = paddingTop + capHeight(kickerBrand) + gapKicker
+        out.set(paddingLeft.toFloat(), top - 10f * dp, (width - paddingRight).toFloat(), top + capHeight(title) + 14f * dp)
+    }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val width = MeasureSpec.getSize(widthMeasureSpec)

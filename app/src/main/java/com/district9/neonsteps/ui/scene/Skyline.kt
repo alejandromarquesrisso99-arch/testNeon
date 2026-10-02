@@ -44,11 +44,14 @@ internal class SkyLayer(
         }
     }
 
-    fun draw(canvas: Canvas, dx: Float) {
+    /** @param blackoutT seconds into a blackout, or negative: windows then return one by one. */
+    fun draw(canvas: Canvas, dx: Float, blackoutT: Float = -1f) {
         canvas.drawBitmap(bitmap, bitmapLeft + dx, bitmapTop, null)
         var lastColor = 0
+        val seed = (parallax * 1000).toInt()
         for (i in 0 until count) {
             if (!lit[i]) continue
+            if (blackoutT >= 0f && Blackout.power(blackoutT, hash(i, seed)) < 0.5f) continue
             val c = windowColor[i]
             if (c != lastColor) {
                 paint.color = Neon.alpha(c, litAlpha)
@@ -308,14 +311,14 @@ internal class Skyline(private val frame: SceneFrame, private val maxShift: Floa
         for (layer in layers) layer.update(t)
     }
 
-    fun drawLayer(canvas: Canvas, index: Int, dx: Float) = layers[index].draw(canvas, dx)
+    fun drawLayer(canvas: Canvas, index: Int, dx: Float, blackoutT: Float = -1f) = layers[index].draw(canvas, dx, blackoutT)
 
     /** "TOWER 61" lettering on the mid-layer tower, a steady, slightly tired teal. */
     /** "TOWER 61" lettering: a tired teal, blazing white-cyan when [lit] (the goal is met). */
-    fun drawTowerLabel(canvas: Canvas, t: Float, dx: Float, lit: Float = 0f) {
+    fun drawTowerLabel(canvas: Canvas, t: Float, dx: Float, lit: Float = 0f, power: Float = 1f) {
         val x = frame.x(503f) + dx
         val y = frame.y(724f)
-        val hum = lerp(0.75f + 0.25f * noise1(t * 3f, 61), 1f, lit)
+        val hum = lerp(0.75f + 0.25f * noise1(t * 3f, 61), 1f, lit) * (0.12f + 0.88f * power)
         labelGlow.color = Neon.mix(Neon.TEAL, Neon.CYAN, lit)
         labelGlow.alpha = ((60 + 110 * lit) * hum).toInt()
         canvas.drawText("TOWER 61", x, y, labelGlow)
@@ -369,13 +372,14 @@ internal class Skyline(private val frame: SceneFrame, private val maxShift: Floa
     }
 
     /** @param layerDx parallax offset of each layer, indexed like [layers]. */
-    fun drawBeacons(canvas: Canvas, sprites: Sprites, t: Float, layerDx: FloatArray) {
+    fun drawBeacons(canvas: Canvas, sprites: Sprites, t: Float, layerDx: FloatArray, power: Float = 1f) {
+        if (power <= 0f) return
         // Beacons are generated per layer; cull those panned out of view.
         val w = frame.width + frame.s(30f)
         for (b in beacons) {
             val dx = layerDx[b.layer]
             if (b.x + dx < -frame.s(30f) || b.x + dx > w) continue
-            val on = smoothstep(0.55f, 1f, 0.5f + 0.5f * wave(t, b.period, b.phase))
+            val on = smoothstep(0.55f, 1f, 0.5f + 0.5f * wave(t, b.period, b.phase)) * power
             sprites.drawBlob(canvas, b.x + dx, b.y, frame.s(26f), frame.s(26f), b.color, 0.55f * on)
             sprites.drawBlob(canvas, b.x + dx, b.y, frame.s(6f), frame.s(6f), 0xFFFFFFFF.toInt(), 0.9f * on)
         }

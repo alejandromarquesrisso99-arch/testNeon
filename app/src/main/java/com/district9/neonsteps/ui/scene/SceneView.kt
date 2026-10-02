@@ -2,7 +2,9 @@ package com.district9.neonsteps.ui.scene
 
 import android.content.Context
 import android.graphics.Canvas
+import android.graphics.RectF
 import android.util.AttributeSet
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.VelocityTracker
 import android.view.View
@@ -12,10 +14,13 @@ import kotlin.math.abs
 import kotlin.math.sign
 import kotlin.math.sqrt
 
+/** Hidden things to find in District 9. */
+enum class EasterEgg { HOTEL_FIXED, GOLDEN_KOI, BLACKOUT }
+
 /**
  * Full-screen, live-rendered District 9 street. Drag sideways to pan the city: each layer
- * slides at its own speed, then the camera springs back. A tap calls down lightning.
- * Purely decorative for accessibility.
+ * slides at its own speed, then the camera springs back. A tap calls down lightning, unless
+ * it lands on something with a secret. Purely decorative for accessibility.
  */
 class SceneView @JvmOverloads constructor(
     context: Context,
@@ -34,12 +39,29 @@ class SceneView @JvmOverloads constructor(
     private var pendingStrike = 0f
     private var celebrating = false
     private var pendingCelebration = false
+    private var hotelFixed = false
+
+    /** Told when the user finds an easter egg. */
+    var onEasterEgg: ((EasterEgg) -> Unit)? = null
+
+    // Long-pressing the step count (this region, in view coordinates) cuts the power.
+    private val blackoutTrigger = RectF()
+    private var longPressFired = false
+    private val longPress = Runnable {
+        val s = scene ?: return@Runnable
+        if (dragging || s.blackoutRunning) return@Runnable
+        longPressFired = true
+        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        s.blackout()
+        onEasterEgg?.invoke(EasterEgg.BLACKOUT)
+    }
 
     // Drag-to-pan state, kept here so it survives the scene being rebuilt.
     private var pan = 0f
     private var panVelocity = 0f
     private var dragging = false
     private var downX = 0f
+    private var downY = 0f
     private var lastX = 0f
     private var tracker: VelocityTracker? = null
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
@@ -61,6 +83,16 @@ class SceneView @JvmOverloads constructor(
     fun setActivity(value: Float) {
         activity = value
         scene?.activity = value
+    }
+
+    /** The HOTEL's "L" stays fixed for the rest of the day once someone fixes it. */
+    fun setHotelFixed(value: Boolean) {
+        hotelFixed = value
+        scene?.hotelFixed = value
+    }
+
+    fun setBlackoutTrigger(region: RectF) {
+        blackoutTrigger.set(region)
     }
 
     /** Goal met today: keep Tower 61 lit and fireworks going (survives scene rebuilds). */
@@ -107,6 +139,7 @@ class SceneView @JvmOverloads constructor(
             tilt?.let(s::setTilt)
             s.activity = activity
             s.celebrating = celebrating
+            s.hotelFixed = hotelFixed
             if (pendingCelebration) {
                 s.celebrate()
                 pendingCelebration = false
@@ -130,14 +163,19 @@ class SceneView @JvmOverloads constructor(
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 downX = event.x
+                downY = event.y
                 lastX = event.x
                 dragging = false
+                longPressFired = false
                 tracker?.recycle()
                 tracker = VelocityTracker.obtain().also { it.addMovement(event) }
+                if (blackoutTrigger.contains(event.x, event.y)) postDelayed(longPress, LONG_PRESS_MS)
             }
             MotionEvent.ACTION_MOVE -> {
                 tracker?.addMovement(event)
+                if (abs(event.y - downY) > touchSlop) removeCallbacks(longPress)
                 if (!dragging && abs(event.x - downX) > touchSlop) {
+                    removeCallbacks(longPress)
                     dragging = true
                     panVelocity = 0f
                     // Start from the slop boundary so movement past it isn't swallowed.
@@ -150,18 +188,27 @@ class SceneView @JvmOverloads constructor(
                 }
             }
             MotionEvent.ACTION_UP -> {
+                removeCallbacks(longPress)
                 if (dragging) {
                     tracker?.let {
                         it.addMovement(event)
                         it.computeCurrentVelocity(1000)
                         panVelocity = it.xVelocity
                     }
-                } else {
-                    performClick()
+                } else if (!longPressFired) {
+                    when (scene?.tap(event.x, event.y)) {
+                        CityScene.Tap.HOTEL_FIXED -> onEasterEgg?.invoke(EasterEgg.HOTEL_FIXED)
+                        CityScene.Tap.GOLDEN_KOI -> onEasterEgg?.invoke(EasterEgg.GOLDEN_KOI)
+                        CityScene.Tap.CONSUMED -> Unit
+                        else -> performClick()
+                    }
                 }
                 endGesture()
             }
-            MotionEvent.ACTION_CANCEL -> endGesture()
+            MotionEvent.ACTION_CANCEL -> {
+                removeCallbacks(longPress)
+                endGesture()
+            }
         }
         return true
     }
@@ -219,7 +266,11 @@ class SceneView @JvmOverloads constructor(
         }
     }
 
+    /** Current easter-egg hit boxes, for tests: the HOTEL's "L" and the koi. */
+    internal fun eggTargets(): Pair<RectF, RectF>? = scene?.debugTargets()
+
     private companion object {
+        const val LONG_PRESS_MS = 650L
         const val SPRING = 6f
         val DAMPING = 2f * sqrt(SPRING)
     }

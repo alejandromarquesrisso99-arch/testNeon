@@ -66,3 +66,28 @@ internal class SceneFrame(val width: Int, val height: Int, val horizon: Float = 
         const val REF_HORIZON = 1360f
     }
 }
+
+/** Timeline of the District 9 blackout easter egg, in seconds. */
+internal object Blackout {
+    const val FAIL = 0.8f
+    const val DARK = 4f
+    const val RESTORE = 3.2f
+    const val TOTAL = FAIL + DARK + RESTORE + 0.6f
+
+    /**
+     * Grid power (0..1) for something on the city grid, [t] seconds into a blackout (negative
+     * when there is none). The grid browns out, dies, then comes back piece by piece in the
+     * order given by [key] (0 first, 1 last), each piece stuttering as it restarts.
+     */
+    fun power(t: Float, key: Float): Float {
+        if (t < 0f) return 1f
+        if (t < FAIL) {
+            val off = t / FAIL
+            return if (hash(kotlin.math.floor(t * 18f).toInt(), 7) > off) 0.8f else 0.04f
+        }
+        val r = t - FAIL - DARK - key * RESTORE
+        if (r < 0f) return 0f
+        if (r < 0.4f) return if (hash(kotlin.math.floor(r * 25f).toInt(), (key * 613f).toInt()) > 0.45f) 1f else 0f
+        return 1f
+    }
+}

@@ -158,6 +158,16 @@ class StepRepository internal constructor(
         prefs.edit().putString(KEY_GOAL_CELEBRATED, today().toString()).apply()
     }
 
+    /** Easter egg: someone fixed the HOTEL's "L" today. It breaks again at midnight. */
+    fun hotelFixedToday(): Boolean = prefs.getString(KEY_HOTEL_FIXED, null) == today().toString()
+
+    fun hotelEverFixed(): Boolean = prefs.contains(KEY_HOTEL_FIXED)
+
+    fun markHotelFixed() {
+        prefs.edit().putString(KEY_HOTEL_FIXED, today().toString()).apply()
+        notifyListeners()
+    }
+
     /** The last [days] days, oldest first, ending with today. */
     fun history(days: Int): List<DayEntry> {
         rollOverIfNeeded()
@@ -241,6 +251,7 @@ class StepRepository internal constructor(
         private const val KEY_RAIN = "rain_mode"
         private const val KEY_GOAL_NOTIFIED = "goal_notified_on"
         private const val KEY_GOAL_CELEBRATED = "goal_celebrated_on"
+        private const val KEY_HOTEL_FIXED = "hotel_fixed_on"
         private const val KEEP_DAYS = 60
         private const val PERSIST_DELAY_MS = 3_000L
         private const val CADENCE_SAMPLES = 128

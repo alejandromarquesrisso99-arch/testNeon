@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.RectF
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -31,6 +32,7 @@ import com.district9.neonsteps.ui.hud.HudPanelView
 import com.district9.neonsteps.ui.hud.NeonButtonView
 import com.district9.neonsteps.ui.hud.TickerItem
 import com.district9.neonsteps.ui.hud.TickerView
+import com.district9.neonsteps.ui.scene.EasterEgg
 import com.district9.neonsteps.ui.scene.SceneView
 import com.district9.neonsteps.util.Format
 import java.time.LocalTime
@@ -53,6 +55,7 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
     private val clockFormat = DateTimeFormatter.ofPattern("HH:mm:ss")
     private var lastSteps = -1
     private var backCallback: Any? = null
+    private val titleBand = RectF()
 
     private val tick = object : Runnable {
         override fun run() {
@@ -89,9 +92,17 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
         header.onPermissionRequest = ::onPermissionTap
         history.onDismiss = ::closeHistory
         scene.setOnClickListener { scene.strike(0.55f) } // tap the street: thunder on demand
+        scene.onEasterEgg = ::onEasterEgg
         ticker.provider = ::headlines
 
         applyInsets()
+        val overlay = findViewById<View>(R.id.overlay)
+        header.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
+            // Long-pressing the step count is the blackout's secret switch.
+            header.titleBand(titleBand)
+            titleBand.offset((v.left + overlay.left).toFloat(), (v.top + overlay.top).toFloat())
+            scene.setBlackoutTrigger(titleBand)
+        }
         hud.addOnLayoutChangeListener { v, _, top, _, _, _, _, _, _ ->
             scene.setStreetLimit(top.toFloat())
             // Keep the history modal between the title and the readouts.
@@ -171,6 +182,8 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
             },
         )
 
+        scene.setHotelFixed(repo.hotelFixedToday()) // and at midnight the "L" dies again
+
         // The goal: Tower 61 lit and fireworks until midnight. The celebration plays once a
         // day — live if the app is open, otherwise the first time it's opened afterwards.
         val goalMet = permitted && steps >= goal
@@ -183,6 +196,19 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
             scene.strike(0.6f) // every thousand steps
         }
         lastSteps = steps
+    }
+
+    private fun onEasterEgg(egg: EasterEgg) {
+        when (egg) {
+            EasterEgg.HOTEL_FIXED -> {
+                repo.markHotelFixed()
+                ticker.breaking(TickerItem("ÚLTIMA HORA · ¡ALGUIEN HA ARREGLADO LA «L» DEL HOTEL!", highlight = true))
+            }
+            EasterEgg.GOLDEN_KOI ->
+                ticker.breaking(TickerItem("ÚLTIMA HORA · AVISTAMIENTO DE UN KOI DORADO SOBRE DISTRICT 9", highlight = true))
+            EasterEgg.BLACKOUT ->
+                ticker.breaking(TickerItem("ÚLTIMA HORA · APAGÓN EN DISTRICT 9 · SOLO TUS PASOS SIGUEN BRILLANDO", highlight = true))
+        }
     }
 
     private fun cycleGoal() {
@@ -236,7 +262,13 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
             add(TickerItem("DESLIZA EL DEDO PARA RECORRER EL DISTRITO", highlight = true))
             add(TickerItem("BOMBAS DE DRENAJE AL 140%"))
             add(TickerItem("${Format.km(steps)} RECORRIDOS BAJO LA LLUVIA"))
-            add(TickerItem("EL LETRERO DEL HOTEL SIGUE SIN SU «L» · EL TÉCNICO VENDRÁ «MAÑANA»"))
+            add(
+                when {
+                    repo.hotelFixedToday() -> TickerItem("LA «L» DEL HOTEL FUNCIONA · DE MOMENTO")
+                    repo.hotelEverFixed() -> TickerItem("LA «L» DEL HOTEL HA VUELTO A FALLAR · EL TÉCNICO: «MAÑANA»")
+                    else -> TickerItem("EL LETRERO DEL HOTEL SIGUE SIN SU «L» · EL TÉCNICO VENDRÁ «MAÑANA»")
+                },
+            )
             if (cadence > 0) add(TickerItem("RITMO ACTUAL $cadence PASOS/MIN", highlight = true))
             add(TickerItem("NIGHT MARKET", highlight = true))
             add(TickerItem("EL KOI DE LA TORRE 61 NADA MÁS RÁPIDO CUANDO CAMINAS"))

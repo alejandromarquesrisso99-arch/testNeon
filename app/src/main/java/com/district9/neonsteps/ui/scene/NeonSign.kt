@@ -114,6 +114,18 @@ internal class NeonSign(
     var averageLevel = 0f
         private set
 
+    private val dark = BooleanArray(elements.size) { it in temper.darkGlyphs }
+    private val dead = BooleanArray(elements.size) { it in temper.deadGlyphs }
+    private val bounds = Array(elements.size) { RectF() }
+
+    /** Grid power from the blackout easter egg; set each frame before [update]. */
+    var powerScale = 1f
+
+    // Dark tubes can be poked (a failed strike) or repaired (they stutter, then hold).
+    private var pokedUntil = -1f
+    private var repairedAt = Float.NaN
+    val isRepaired: Boolean get() = !repairedAt.isNaN()
+
     // Sign-wide event state.
     private var eventKind = 0 // 0 none, 1 stutter, 2 brownout, 3 dropout
     private var eventEnd = 0f
@@ -142,14 +154,14 @@ internal class NeonSign(
             }
         }
 
-        val bounds = RectF()
         for ((i, p) in elements.withIndex()) {
-            p.computeBounds(bounds, true)
-            val l = bounds.left - pad
-            val t = bounds.top - pad
+            val b = bounds[i]
+            p.computeBounds(b, true)
+            val l = b.left - pad
+            val t = b.top - pad
             val bmp = Bitmap.createBitmap(
-                (bounds.width() + 2 * pad).toInt().coerceAtLeast(1),
-                (bounds.height() + 2 * pad).toInt().coerceAtLeast(1),
+                (b.width() + 2 * pad).toInt().coerceAtLeast(1),
+                (b.height() + 2 * pad).toInt().coerceAtLeast(1),
                 Bitmap.Config.ARGB_8888,
             )
             Canvas(bmp).apply {
@@ -232,24 +244,54 @@ internal class NeonSign(
         var sum = 0f
         for (i in elements.indices) {
             val glyph = when {
-                i in temper.darkGlyphs -> 0f
-                i in temper.deadGlyphs -> deadGlyphAttempt(t, i)
-                else -> {
-                    if (t >= glyphNextDrop[i]) {
-                        glyphDropEnd[i] = t + rng.range(0.08f, 0.9f)
-                        glyphNextDrop[i] = glyphDropEnd[i] + rng.range(temper.glyphDropGap.start, temper.glyphDropGap.endInclusive)
-                    }
-                    if (t < glyphDropEnd[i]) {
-                        if (hash(floor(t * 19f).toInt(), seed + i) > 0.7f) 0.7f else 0.05f
-                    } else {
-                        1f
-                    }
-                }
+                dark[i] -> darkGlyph(t, i)
+                dead[i] -> deadGlyphAttempt(t, i)
+                else -> liveGlyph(t, i)
             }
-            levels[i] = (temper.baseLevel * signLevel * glyph * hum).coerceIn(0f, 1f)
+            levels[i] = (temper.baseLevel * signLevel * glyph * hum * powerScale).coerceIn(0f, 1f)
             sum += levels[i]
         }
         averageLevel = if (elements.isEmpty()) 0f else sum / elements.size
+    }
+
+    private fun liveGlyph(t: Float, i: Int): Float {
+        if (t >= glyphNextDrop[i]) {
+            glyphDropEnd[i] = t + rng.range(0.08f, 0.9f)
+            glyphNextDrop[i] = glyphDropEnd[i] + rng.range(temper.glyphDropGap.start, temper.glyphDropGap.endInclusive)
+        }
+        return if (t < glyphDropEnd[i]) {
+            if (hash(floor(t * 19f).toInt(), seed + i) > 0.7f) 0.7f else 0.05f
+        } else {
+            1f
+        }
+    }
+
+    /** Dark until repaired; a poke makes it spit and fail; a repair stutters into life. */
+    private fun darkGlyph(t: Float, i: Int): Float {
+        if (!repairedAt.isNaN()) {
+            val r = t - repairedAt
+            if (r >= REPAIR_SECONDS) return liveGlyph(t, i)
+            return if (hash(floor(t * 24f).toInt(), seed * 7 + i) < 0.3f + r / REPAIR_SECONDS * 0.6f) 1f else 0.05f
+        }
+        if (t < pokedUntil) return if (hash(floor(t * 30f).toInt(), seed * 5 + i) > 0.5f) 0.45f else 0f
+        return 0f
+    }
+
+    /** Screen bounds (before parallax) of the first permanently dark element, if any. */
+    fun darkElementBounds(): RectF? = dark.indexOfFirst { it }.takeIf { it >= 0 }?.let { bounds[it] }
+
+    fun poke(t: Float) {
+        pokedUntil = t + 0.3f
+    }
+
+    /** Fix the dark tubes; [animate] plays the stuttering restart, otherwise they're simply on. */
+    fun repair(t: Float, animate: Boolean) {
+        repairedAt = if (animate) t else t - REPAIR_SECONDS
+    }
+
+    /** Back to broken (a new day in District 9). */
+    fun unrepair() {
+        repairedAt = Float.NaN
     }
 
     /** A dead tube mostly stays dark, but every so often it tries, and fails, to strike. */
@@ -278,6 +320,8 @@ internal class NeonSign(
     }
 
     companion object {
+        private const val REPAIR_SECONDS = 1.6f
+
         /** Vertical katakana sign: glyphs stacked in a framed box. */
         fun vertical(
             frame: SceneFrame, text: String, color: Int,

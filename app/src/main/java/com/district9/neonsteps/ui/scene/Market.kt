@@ -196,17 +196,27 @@ internal class Market(private val frame: SceneFrame, private val sprites: Sprite
         }
     }
 
-    fun drawStalls(canvas: Canvas, t: Float, dx: Float) {
+    private val shade = Paint()
+
+    fun drawStalls(canvas: Canvas, t: Float, dx: Float, blackoutT: Float = -1f) {
         canvas.drawBitmap(bitmap, bitmapLeft + dx, bitmapTop, null)
-        drawBulbs(canvas, t, dx, 1f)
+        if (blackoutT >= 0f) {
+            // Counters and awnings lose their light with the grid.
+            shade.color = Neon.alpha(0xFF040010.toInt(), 0.75f * (1f - Blackout.power(blackoutT, 0.45f)))
+            canvas.drawRect(bitmapLeft + dx, bitmapTop, bitmapLeft + dx + bitmap.width, bitmapTop + bitmap.height, shade)
+        }
+        drawBulbs(canvas, t, dx, 1f, blackoutT)
     }
 
-    fun drawBulbs(canvas: Canvas, t: Float, dx: Float, alpha: Float) {
+    fun drawBulbs(canvas: Canvas, t: Float, dx: Float, alpha: Float, blackoutT: Float = -1f) {
         for (i in bulbX.indices) {
+            // During a blackout's restore, the string lights come back in a run.
+            val grid = if (blackoutT >= 0f) Blackout.power(blackoutT, 0.25f + 0.4f * i / bulbX.size) else 1f
+            if (grid <= 0f) continue
             val p = bulbPhase[i]
             // Most bulbs twinkle gently; a few blink out entirely now and then.
             val blink = if (hash((t * 2f + p).toInt(), i) > 0.93f) 0.15f else 1f
-            val a = (0.72f + 0.28f * sin(t * 2.3f + p)) * blink * alpha
+            val a = (0.72f + 0.28f * sin(t * 2.3f + p)) * blink * alpha * grid
             sprites.drawBlob(canvas, bulbX[i] + dx, bulbY[i], frame.s(16f), frame.s(16f), bulbColor[i], 0.55f * a)
             sprites.drawBlob(canvas, bulbX[i] + dx, bulbY[i], frame.s(4.5f), frame.s(4.5f), Neon.mix(bulbColor[i], 0xFFFFFFFF.toInt(), 0.6f), a)
         }

@@ -69,6 +69,16 @@ class TickerView @JvmOverloads constructor(
         setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), resolveSize(h, heightMeasureSpec))
     }
 
+    /** Breaking news: a fresh strip led by [item], scrolling in from the right edge right now. */
+    fun breaking(item: TickerItem) {
+        items = listOf(item) + provider?.invoke().orEmpty()
+        widths = FloatArray(items.size) { text.measureText(items[it].text) }
+        stripWidth = widths.sum() + items.size * (2 * sepGap + 7f * dp)
+        val badgeW = 24f * dp + badgeText.measureText(badgeLabel) + 12f * dp
+        offset = -(width - badgeW - 16f * dp)
+        invalidate()
+    }
+
     private fun rebuild() {
         items = provider?.invoke().orEmpty().ifEmpty { listOf(TickerItem("D9 WIRE")) }
         widths = FloatArray(items.size) { text.measureText(items[it].text) }

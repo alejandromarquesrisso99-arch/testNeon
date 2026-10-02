@@ -20,7 +20,7 @@ import kotlin.math.sign
 import kotlin.math.sqrt
 
 /** Hidden things to find in District 9. */
-enum class EasterEgg { HOTEL_FIXED, GOLDEN_KOI, BLACKOUT }
+enum class EasterEgg { HOTEL_FIXED, GOLDEN_KOI, BLACKOUT, KAGE_BUNSHIN, RAMEN_HOLOGRAM }
 
 /**
  * Full-screen, live-rendered District 9 street. Drag sideways to pan the city: each layer
@@ -96,13 +96,15 @@ class SceneView @JvmOverloads constructor(
      * vibration: the system's "vibrate on touch" switch (which silently mutes
      * performHapticFeedback) doesn't apply.
      */
-    private fun buzzBlackout() {
+    private fun buzzBlackout() = buzz(BLACKOUT_TIMINGS, BLACKOUT_AMPLITUDES)
+
+    private fun buzz(timings: LongArray, amplitudes: IntArray) {
         val vibrator = vibrator()
         if (vibrator == null || !vibrator.hasVibrator()) {
             performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
             return
         }
-        val effect = VibrationEffect.createWaveform(BLACKOUT_TIMINGS, BLACKOUT_AMPLITUDES, -1)
+        val effect = VibrationEffect.createWaveform(timings, amplitudes, -1)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             vibrator.vibrate(effect, VibrationAttributes.createForUsage(VibrationAttributes.USAGE_MEDIA))
         } else {
@@ -232,6 +234,11 @@ class SceneView @JvmOverloads constructor(
                     when (scene?.tap(event.x, event.y)) {
                         CityScene.Tap.HOTEL_FIXED -> onEasterEgg?.invoke(EasterEgg.HOTEL_FIXED)
                         CityScene.Tap.GOLDEN_KOI -> onEasterEgg?.invoke(EasterEgg.GOLDEN_KOI)
+                        CityScene.Tap.KAGE_BUNSHIN -> {
+                            buzz(POOF_TIMINGS, POOF_AMPLITUDES)
+                            onEasterEgg?.invoke(EasterEgg.KAGE_BUNSHIN)
+                        }
+                        CityScene.Tap.RAMEN_HOLOGRAM -> onEasterEgg?.invoke(EasterEgg.RAMEN_HOLOGRAM)
                         CityScene.Tap.CONSUMED -> Unit
                         else -> performClick()
                     }
@@ -300,7 +307,7 @@ class SceneView @JvmOverloads constructor(
     }
 
     /** Current easter-egg hit boxes, for tests: the HOTEL's "L" and the koi. */
-    internal fun eggTargets(): Pair<RectF, RectF>? = scene?.debugTargets()
+    internal fun eggTargets(): EggTargets? = scene?.debugTargets()
 
     private companion object {
         const val LONG_PRESS_MS = 650L
@@ -308,6 +315,11 @@ class SceneView @JvmOverloads constructor(
         // Waveform segments (ms) and their strength (0–255): thunk, gap, sputter, gap, sputter, gap, hum.
         val BLACKOUT_TIMINGS = longArrayOf(0, 90, 120, 40, 90, 45, 150, 265)
         val BLACKOUT_AMPLITUDES = intArrayOf(0, 255, 0, 150, 0, 110, 0, 55)
+
+        // Kage Bunshin: silence while the ninja dashes out, a big poof, then a patter of small
+        // poofs as the clones appear (in step with NinjaSquad's timeline).
+        val POOF_TIMINGS = longArrayOf(0, 1600, 70, 50) + LongArray(18) { if (it % 2 == 0) 25L else 95L }
+        val POOF_AMPLITUDES = intArrayOf(0, 0, 230, 0) + IntArray(18) { if (it % 2 == 0) 120 else 0 }
         const val SPRING = 6f
         val DAMPING = 2f * sqrt(SPRING)
     }

@@ -54,6 +54,13 @@ compilada en otro ordenador, desinstala antes la anterior.
   lluvia, los paraguas y tus pasos) y luego vuelve la luz a trozos, con los neones arrancando
   a trompicones.
 
+- **Kage Bunshin**: toca 3 veces el letrero RAMEN. Parpadea y se convierte en 一楽, un ninja sale
+  corriendo del puesto con los brazos hacia atrás y, ¡puf!, la acera se llena de clones entre
+  nubes de humo (el móvil vibra con cada «puf»).
+- **Ramen holográfico**: toca el puesto amarillo. El proyector de la Torre 61 cambia el koi por un
+  cuenco de ramen en neón, con vapor y un narutomaki girando, durante 30 segundos.
+- **Cuencos de ramen**: el noticiero cuenta tus calorías en cuencos de ramen. Dattebayo.
+
 El noticiero D9 WIRE da la exclusiva de cada uno.
 </details>
 

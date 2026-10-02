@@ -81,11 +81,11 @@ class EasterEggTest {
     @Test
     fun fiveTapsFixTheHotelL() {
         repeat(4) {
-            val l = scene.eggTargets()!!.first
+            val l = scene.eggTargets()!!.hotelL
             tap(l.centerX(), l.centerY())
         }
         assertTrue(found.isEmpty())
-        val l = scene.eggTargets()!!.first
+        val l = scene.eggTargets()!!.hotelL
         tap(l.centerX(), l.centerY())
         assertEquals(listOf(EasterEgg.HOTEL_FIXED), found)
         assertTrue(StepRepository.get(activity).hotelFixedToday())
@@ -98,12 +98,46 @@ class EasterEggTest {
     @Test
     fun threeTapsFreeTheGoldenKoi() {
         repeat(3) {
-            val koi = scene.eggTargets()!!.second
+            val koi = scene.eggTargets()!!.koi
             tap(koi.centerX(), koi.centerY())
         }
         assertEquals(listOf(EasterEgg.GOLDEN_KOI), found)
         advance(4f)
         capture("egg_koi.png")
+    }
+
+    @Test
+    fun threeTapsOnRamenCallTheShadowClones() {
+        repeat(3) {
+            val sign = scene.eggTargets()!!.ramenSign
+            tap(sign.centerX(), sign.centerY())
+        }
+        assertEquals(listOf(EasterEgg.KAGE_BUNSHIN), found)
+        // A big poof, then the clones' patter, felt as media vibration.
+        assertTrue(shadowOf(activity.getSystemService(VibratorManager::class.java).defaultVibrator).isVibrating)
+        advance(0.9f)
+        capture("egg_ninja_dash.png")
+        advance(1.8f)
+        capture("egg_kage_bunshin.png")
+    }
+
+    @Test
+    fun tappingTheRamenStandProjectsABowl() {
+        val stall = scene.eggTargets()!!.ramenStall
+        tap(stall.centerX(), stall.centerY())
+        assertEquals(listOf(EasterEgg.RAMEN_HOLOGRAM), found)
+        // Tapping again just keeps the bowl coming; it's not a new discovery.
+        tap(stall.centerX(), stall.centerY())
+        assertEquals(1, found.size)
+        advance(1.2f)
+        capture("egg_ramen.png")
+    }
+
+    @Test
+    fun caloriesAreCountedInRamenBowls() {
+        assertEquals("0,0 CUENCOS", com.district9.neonsteps.util.Format.ramenBowls(0))
+        assertEquals("1,0 CUENCO", com.district9.neonsteps.util.Format.ramenBowls(13_750))
+        assertEquals("0,6 CUENCOS", com.district9.neonsteps.util.Format.ramenBowls(8_000))
     }
 
     @Test

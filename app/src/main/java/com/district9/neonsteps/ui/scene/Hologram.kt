@@ -48,6 +48,7 @@ internal class Hologram(
     private val wire = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
     }
 
     private val stations = 9
@@ -82,6 +83,16 @@ internal class Hologram(
     private var glitterDebt = 0f
     private val skyTop = frame.height * 0.2f
     private val skyBottom = maxOf(frame.y(600f), skyTop + frame.s(120f))
+
+    // Ramen easter egg: the projector swaps the koi for a giant bowl.
+    private var ramenUntil = -1f
+    private var ramen = 0f
+    private var bowlVisible = false
+    private val bowl = Path()
+    private val swirl = Path()
+    private val steam = Path()
+    private val broth = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val oval = RectF()
 
     /** Golden glitter trail, in sky coordinates. */
     val glitter = Sparks(frame, 160)
@@ -122,6 +133,13 @@ internal class Hologram(
         kick = 2.2f
     }
 
+    /** Project a bowl of ramen instead of the koi for [seconds] (tapping again tops it up). */
+    fun serveRamen(t: Float, seconds: Float) {
+        ramenUntil = t + seconds
+    }
+
+    fun isServingRamen(t: Float): Boolean = t < ramenUntil
+
     /** Let the koi out of the beam for [seconds]. */
     fun release(t: Float, seconds: Float) {
         goldenUntil = t + seconds
@@ -158,11 +176,120 @@ internal class Hologram(
         }
         glitter.update(dt)
 
+        // The swap glitches in and out, like a channel change.
+        ramen += ((if (t < ramenUntil) 1f else 0f) - ramen).coerceIn(-dt / 0.6f, dt / 0.6f)
+        bowlVisible = when {
+            ramen <= 0f -> false
+            ramen >= 1f -> true
+            else -> hash(kotlin.math.floor(t * 16f).toInt(), 61) < ramen
+        }
+
         if (t >= nextGlitch) {
             glitchUntil = t + rng.range(0.05f, 0.16f)
             glitchDx = frame.s(rng.range(-9f, 9f))
             nextGlitch = t + rng.range(2.5f, 7f)
         }
+    }
+
+    private val bowlX = frame.x(655f)
+    private fun bowlY(t: Float) = frame.y(395f) + frame.s(6f) * sin(t * 1.3f)
+
+    /** The ramen bowl hologram: bowl, broth, egg, nori, a spinning narutomaki, noodles and steam. */
+    fun drawRamen(canvas: Canvas, t: Float, dx: Float, power: Float) {
+        if (!bowlVisible) return
+        val f = flicker(t) * power
+        if (f <= 0.01f) return
+        val r = frame.s(80f)
+        val bx = bowlX + dx
+        val by = bowlY(t)
+
+        // Broth.
+        oval.set(bx - 0.86f * r, by - 0.2f * r, bx + 0.86f * r, by + 0.2f * r)
+        broth.color = Neon.alpha(0xFFFFB347.toInt(), 0.2f * f)
+        canvas.drawOval(oval, broth)
+
+        bowl.reset()
+        oval.set(bx - r, by - 0.28f * r, bx + r, by + 0.28f * r)
+        bowl.addOval(oval, Path.Direction.CW)
+        bowl.moveTo(bx - r, by)
+        bowl.cubicTo(bx - r, by + 0.75f * r, bx - 0.45f * r, by + 0.95f * r, bx, by + 0.95f * r)
+        bowl.cubicTo(bx + 0.45f * r, by + 0.95f * r, bx + r, by + 0.75f * r, bx + r, by)
+        bowl.moveTo(bx - 0.3f * r, by + 0.93f * r)
+        bowl.lineTo(bx - 0.26f * r, by + 1.08f * r)
+        bowl.lineTo(bx + 0.26f * r, by + 1.08f * r)
+        bowl.lineTo(bx + 0.3f * r, by + 0.93f * r)
+        // A painted band around the bowl.
+        bowl.moveTo(bx - 0.92f * r, by + 0.3f * r)
+        bowl.quadTo(bx, by + 0.66f * r, bx + 0.92f * r, by + 0.3f * r)
+        // Nori standing at the back.
+        bowl.moveTo(bx - 0.62f * r, by - 0.1f * r)
+        bowl.lineTo(bx - 0.68f * r, by - 0.62f * r)
+        bowl.lineTo(bx - 0.36f * r, by - 0.66f * r)
+        bowl.lineTo(bx - 0.3f * r, by - 0.14f * r)
+        // Egg, halved.
+        oval.set(bx - 0.56f * r, by - 0.1f * r, bx - 0.2f * r, by + 0.06f * r)
+        bowl.addOval(oval, Path.Direction.CW)
+        // Chopsticks lifting noodles.
+        bowl.moveTo(bx + 1.02f * r, by - 1.3f * r)
+        bowl.lineTo(bx + 0.02f * r, by - 0.56f * r)
+        bowl.moveTo(bx + 1.1f * r, by - 1.2f * r)
+        bowl.lineTo(bx + 0.1f * r, by - 0.5f * r)
+        for (k in 0 until 4) {
+            val nx = bx + (0.04f + k * 0.045f) * r
+            bowl.moveTo(nx, by - 0.53f * r)
+            for (step in 1..6) {
+                val v = step / 6f
+                bowl.lineTo(nx + 0.05f * r * sin(t * 3f + k + v * 6f), by - 0.53f * r + 0.5f * r * v)
+            }
+        }
+
+        // The narutomaki: a fishcake slice with its pink swirl, spinning.
+        val nx = bx + 0.4f * r
+        val ny = by - 0.02f * r
+        oval.set(nx - 0.22f * r, ny - 0.1f * r, nx + 0.22f * r, ny + 0.1f * r)
+        bowl.addOval(oval, Path.Direction.CW)
+        swirl.reset()
+        val spin = t * 2.6f
+        for (i in 0..40) {
+            val th = i / 40f * 4f * PI.toFloat()
+            val rr = 0.19f * r * th / (4f * PI.toFloat())
+            val px = nx + rr * kotlin.math.cos(th + spin)
+            val py = ny + rr * sin(th + spin) * 0.45f
+            if (i == 0) swirl.moveTo(px, py) else swirl.lineTo(px, py)
+        }
+
+        // Steam curling up.
+        steam.reset()
+        for (k in 0 until 3) {
+            val sx = bx + (-0.3f + k * 0.28f) * r
+            steam.moveTo(sx, by - 0.22f * r)
+            for (step in 1..8) {
+                val v = step / 8f
+                steam.lineTo(sx + 0.1f * r * sin(t * 2f + k * 2f + v * 5f), by - 0.22f * r - 0.95f * r * v)
+            }
+        }
+
+        wire.style = Paint.Style.STROKE
+        // Glow, chromatic split, core — the same treatment as the koi.
+        strokePath(canvas, bowl, frame.s(6f), Neon.alpha(Neon.CYAN, 0.12f * f), 0f)
+        strokePath(canvas, bowl, frame.s(1.8f), Neon.alpha(Neon.MAGENTA, 0.6f * f), frame.s(3f))
+        strokePath(canvas, bowl, frame.s(1.8f), Neon.alpha(Neon.CYAN, 0.9f * f), -frame.s(1.5f))
+        strokePath(canvas, bowl, frame.s(0.9f), Neon.alpha(0xFFE6FDFF.toInt(), 0.7f * f), 0f)
+        strokePath(canvas, swirl, frame.s(5f), Neon.alpha(0xFFFF6BB5.toInt(), 0.3f * f), 0f)
+        strokePath(canvas, swirl, frame.s(2f), Neon.alpha(0xFFFF8CC6.toInt(), f), 0f)
+        strokePath(canvas, steam, frame.s(2f), Neon.alpha(0xFFE6FDFF.toInt(), 0.35f * f), 0f)
+        // Yolk.
+        broth.color = Neon.alpha(Neon.YELLOW, 0.75f * f)
+        canvas.drawCircle(bx - 0.38f * r, by - 0.02f * r, 0.055f * r, broth)
+    }
+
+    private fun strokePath(canvas: Canvas, p: Path, width: Float, color: Int, ox: Float) {
+        wire.strokeWidth = width
+        wire.color = color
+        canvas.save()
+        canvas.translate(ox, 0f)
+        canvas.drawPath(p, wire)
+        canvas.restore()
     }
 
     /** Refresh the tap target for the current parallax offset [dx] (same placement as [drawKoi]). */
@@ -183,15 +310,22 @@ internal class Hologram(
         coneEdge.alpha = (90 * f).toInt()
         canvas.drawLine(coneLeft, coneTopY, coneRight, coneTopY, coneEdge)
         captionPaint.alpha = (140 * f).toInt()
-        val caption = if (gold > 0.5f) "KOI-61 · SEÑAL PERDIDA" else "KOI-61 · NIGHT 1000"
+        val caption = when {
+            bowlVisible -> "一楽 · RAMEN 24H"
+            gold > 0.5f -> "KOI-61 · SEÑAL PERDIDA"
+            else -> "KOI-61 · NIGHT 1000"
+        }
         canvas.drawText(caption, frame.x(376f), coneTopY + frame.s(40f), captionPaint)
 
-        val beamAlpha = f * (1f - smoothstep(0f, 0.6f, gold))
+        // The beam feeds whatever is projected: the koi, or the bowl while ramen is served.
+        val beamAlpha = f * if (bowlVisible) 1f else 1f - smoothstep(0f, 0.6f, gold)
         if (beamAlpha > 0.01f) {
+            val tx = if (bowlVisible) bowlX else kx
+            val ty = if (bowlVisible) bowlY(t) + frame.s(70f) else ky + frame.s(30f)
             beamPath.reset()
             beamPath.moveTo(projX - frame.s(5f), projY)
-            beamPath.lineTo(kx - length * 0.42f, ky + frame.s(30f))
-            beamPath.lineTo(kx + length * 0.42f, ky + frame.s(30f))
+            beamPath.lineTo(tx - length * 0.42f, ty)
+            beamPath.lineTo(tx + length * 0.42f, ty)
             beamPath.lineTo(projX + frame.s(5f), projY)
             beamPath.close()
             beamPaint.alpha = (255 * beamAlpha).toInt()
@@ -215,6 +349,8 @@ internal class Hologram(
         val f = flicker(t) * maxOf(power, smoothstep(0.3f, 1f, gold))
         glitter.draw(canvas, lerp(dx, dx * 0.2f, gold))
         if (f <= 0.01f) return
+        // While ramen is on, the bowl takes the koi's place in the beam (a loose koi stays out).
+        if (bowlVisible && gold < 0.5f) return
 
         if (gold > 0f) sprites.drawBlob(canvas, x, ky, length * 0.9f, length * 0.55f, GOLD, 0.22f * gold * f)
 

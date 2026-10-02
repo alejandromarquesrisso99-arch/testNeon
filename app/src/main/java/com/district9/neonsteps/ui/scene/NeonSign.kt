@@ -57,6 +57,17 @@ internal object KanaGlyphs {
         'ラ' to arrayOf(floatArrayOf(0.24f, 0.14f, 0.76f, 0.14f), floatArrayOf(0.14f, 0.38f, 0.84f, 0.38f, 0.74f, 0.66f, 0.42f, 0.9f)),
         'メ' to arrayOf(floatArrayOf(0.78f, 0.12f, 0.6f, 0.5f, 0.2f, 0.9f), floatArrayOf(0.3f, 0.36f, 0.84f, 0.8f)),
         'ー' to arrayOf(floatArrayOf(0.12f, 0.5f, 0.88f, 0.5f)),
+        // 一楽 ("Ichiraku"), for the ramen stand's secret name.
+        '一' to arrayOf(floatArrayOf(0.08f, 0.52f, 0.92f, 0.48f)),
+        '楽' to arrayOf(
+            floatArrayOf(0.2f, 0.12f, 0.27f, 0.24f), floatArrayOf(0.12f, 0.38f, 0.25f, 0.3f),
+            floatArrayOf(0.8f, 0.12f, 0.73f, 0.24f), floatArrayOf(0.88f, 0.38f, 0.75f, 0.3f),
+            floatArrayOf(0.52f, 0.03f, 0.47f, 0.12f),
+            floatArrayOf(0.36f, 0.44f, 0.36f, 0.14f, 0.64f, 0.14f, 0.64f, 0.44f, 0.36f, 0.44f),
+            floatArrayOf(0.36f, 0.29f, 0.64f, 0.29f),
+            floatArrayOf(0.08f, 0.58f, 0.92f, 0.58f), floatArrayOf(0.5f, 0.46f, 0.5f, 0.97f),
+            floatArrayOf(0.47f, 0.62f, 0.12f, 0.9f), floatArrayOf(0.53f, 0.62f, 0.9f, 0.88f),
+        ),
     )
 
     fun path(ch: Char, left: Float, top: Float, size: Float): Path {
@@ -120,6 +131,9 @@ internal class NeonSign(
 
     /** Grid power from the blackout easter egg; set each frame before [update]. */
     var powerScale = 1f
+
+    /** Hidden signs draw nothing and cast no light (used to swap RAMEN for 一楽). */
+    var visible = true
 
     // Dark tubes can be poked (a failed strike) or repaired (they stutter, then hold).
     private var pokedUntil = -1f
@@ -248,7 +262,7 @@ internal class NeonSign(
                 dead[i] -> deadGlyphAttempt(t, i)
                 else -> liveGlyph(t, i)
             }
-            levels[i] = (temper.baseLevel * signLevel * glyph * hum * powerScale).coerceIn(0f, 1f)
+            levels[i] = if (visible) (temper.baseLevel * signLevel * glyph * hum * powerScale).coerceIn(0f, 1f) else 0f
             sum += levels[i]
         }
         averageLevel = if (elements.isEmpty()) 0f else sum / elements.size
@@ -302,6 +316,7 @@ internal class NeonSign(
     }
 
     fun drawWash(canvas: Canvas, sprites: Sprites, dx: Float) {
+        if (!visible) return
         sprites.drawBlob(
             canvas, box.centerX() + dx, box.centerY(),
             box.width() * 0.9f + frame.s(70f), box.height() * 0.62f + frame.s(70f),
@@ -310,6 +325,7 @@ internal class NeonSign(
     }
 
     fun draw(canvas: Canvas, dx: Float) {
+        if (!visible) return
         canvas.drawBitmap(base, baseLeft + dx, baseTop, null)
         for (i in lit.indices) {
             val a = levels[i]
@@ -354,6 +370,29 @@ internal class NeonSign(
                 temper
             }
             return NeonSign(color, box, paths, framed, shifted, frame, seed)
+        }
+
+        /** Horizontal sign of hand-traced glyphs, centred in a framed box. */
+        fun horizontalKana(
+            frame: SceneFrame, text: String, color: Int,
+            refLeft: Float, refTop: Float, refRight: Float, refBottom: Float,
+            temper: SignTemper, seed: Int,
+        ): NeonSign {
+            val box = RectF(frame.x(refLeft), frame.y(refTop), frame.x(refRight), frame.y(refBottom))
+            val glyph = box.height() * 0.66f
+            val step = glyph * 1.25f
+            val total = step * (text.length - 1) + glyph
+            val left = box.centerX() - total / 2f
+            val top = box.centerY() - glyph / 2f
+            val paths = ArrayList<Path>()
+            paths += Path().apply {
+                addRoundRect(
+                    RectF(box.left + frame.s(4f), box.top + frame.s(4f), box.right - frame.s(4f), box.bottom - frame.s(4f)),
+                    frame.s(5f), frame.s(5f), Path.Direction.CW,
+                )
+            }
+            text.forEachIndexed { i, ch -> paths += KanaGlyphs.path(ch, left + i * step, top, glyph) }
+            return NeonSign(color, box, paths, true, temper, frame, seed)
         }
 
         /** Horizontal word sign whose letters are outlined tubes traced from a bold typeface. */

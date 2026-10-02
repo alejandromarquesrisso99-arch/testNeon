@@ -208,6 +208,10 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
                 ticker.breaking(TickerItem("ÚLTIMA HORA · AVISTAMIENTO DE UN KOI DORADO SOBRE DISTRICT 9", highlight = true))
             EasterEgg.BLACKOUT ->
                 ticker.breaking(TickerItem("ÚLTIMA HORA · APAGÓN EN DISTRICT 9 · SOLO TUS PASOS SIGUEN BRILLANDO", highlight = true))
+            EasterEgg.KAGE_BUNSHIN ->
+                ticker.breaking(TickerItem("ÚLTIMA HORA · ¡KAGE BUNSHIN NO JUTSU! NINJAS CORRIENDO POR LA ACERA DEL MERCADO", highlight = true))
+            EasterEgg.RAMEN_HOLOGRAM ->
+                ticker.breaking(TickerItem("ÚLTIMA HORA · LA TORRE 61 PROYECTA RAMEN · ICHIRAKU ABIERTO 24H", highlight = true))
         }
     }
 
@@ -276,6 +280,8 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
             if (repo.sensorMode == SensorMode.ACCELEROMETER) {
                 add(TickerItem("SIN PODÓMETRO · CONTANDO CON EL ACELERÓMETRO CON LA PANTALLA ENCENDIDA", highlight = true))
             }
+            add(TickerItem("HOY HAS QUEMADO ${Format.ramenBowls(steps)} DE RAMEN · DATTEBAYO"))
+            if (steps >= goal) add(TickerItem("RAMEN GRATIS EN ICHIRAKU PARA QUIEN LLEGA A LA META", highlight = true))
             add(TickerItem("RAMEN 24H EN EL PUESTO 3"))
         }
     }

@@ -34,6 +34,18 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
         SignTemper(baseLevel = 0.6f, eventGap = 6f..16f, darkGlyphs = setOf(4)), seed = 31,
     )
 
+    /** RAMEN, and its secret name 一楽 that it flips to for the clone jutsu. */
+    private val ramenSign = NeonSign.word(
+        frame, "RAMEN", Neon.MAGENTA, fonts.bold, 590f, 1032f, 852f, 1123f,
+        SignTemper(eventGap = 3f..9f), seed = 53,
+    )
+    private val ichiraku = NeonSign.horizontalKana(
+        frame, "一楽", Neon.MAGENTA, 590f, 1032f, 852f, 1123f,
+        SignTemper(eventGap = 8f..16f), seed = 59,
+    ).apply { visible = false }
+    private val ninjas = NinjaSquad(frame, sprites, maxShift * FRONT_PARALLAX)
+    private var ichirakuFrom = -100f
+
     private val signs: List<NeonSign> = listOf(
         NeonSign.vertical(
             frame, "チカムスサロ", 0xFF9B5CFF.toInt(), 792f, 412f, 72f,
@@ -48,10 +60,8 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
             frame, "ステップ", Neon.YELLOW, 817f, 866f, 73f,
             SignTemper(eventGap = 6f..15f, glyphDropGap = 9f..24f), seed = 47,
         ),
-        NeonSign.word(
-            frame, "RAMEN", Neon.MAGENTA, fonts.bold, 590f, 1032f, 852f, 1123f,
-            SignTemper(eventGap = 3f..9f), seed = 53,
-        ),
+        ramenSign,
+        ichiraku,
         NeonSign.vertical(
             frame, "ラメン", Neon.MAGENTA, 1064f, 700f, 72f,
             SignTemper(eventGap = 4f..10f), seed = 67,
@@ -111,7 +121,10 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
 
     // --- Easter eggs -------------------------------------------------------------------------
 
-    enum class Tap { NONE, CONSUMED, HOTEL_FIXED, GOLDEN_KOI }
+    enum class Tap { NONE, CONSUMED, HOTEL_FIXED, GOLDEN_KOI, KAGE_BUNSHIN, RAMEN_HOLOGRAM }
+
+    private var ramenTaps = 0
+    private var lastRamenTap = -10f
 
     private var hotelTaps = 0
     private var lastHotelTap = -10f
@@ -136,9 +149,15 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
     }
 
     /** Screen hit boxes of the HOTEL's "L" and the koi, for tests. */
-    fun debugTargets(): Pair<android.graphics.RectF, android.graphics.RectF>? {
+    fun debugTargets(): EggTargets? {
         val l = hotel.darkElementBounds() ?: return null
-        return android.graphics.RectF(l).apply { offset(layerDx[3], 0f) } to android.graphics.RectF(hologram.koiRect)
+        return EggTargets(
+            hotelL = android.graphics.RectF(l).apply { offset(layerDx[3], 0f) },
+            koi = android.graphics.RectF(hologram.koiRect),
+            ramenSign = android.graphics.RectF(ramenSign.box).apply { offset(layerDx[3], 0f) },
+            ramenStall = android.graphics.RectF(frame.x(790f), frame.y(1240f), frame.x(1040f), frame.y(1356f))
+                .apply { offset(camera * FRONT_PARALLAX, 0f) },
+        )
     }
 
     /** Taps on the koi or the HOTEL's dead "L" feed their easter eggs instead of calling lightning. */
@@ -160,9 +179,33 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
                 return Tap.CONSUMED
             }
         }
+        val near = layerDx[3]
+        // RAMEN, three times: the sign flips to 一楽 and the shadow clones come out.
+        hitRect.set(ramenSign.box)
+        hitRect.offset(near, 0f)
+        hitRect.inset(-frame.s(16f), -frame.s(16f))
+        if (hitRect.contains(x, y)) {
+            if (ninjas.running) return Tap.CONSUMED
+            ramenTaps = if (t - lastRamenTap > TAP_WINDOW) 1 else ramenTaps + 1
+            lastRamenTap = t
+            ramenSign.poke(t)
+            if (ramenTaps < 3) return Tap.CONSUMED
+            ramenTaps = 0
+            ichirakuFrom = t
+            ninjas.start(frame.x(915f))
+            return Tap.KAGE_BUNSHIN
+        }
+        // The ramen stand itself: Tower 61's projector serves a bowl.
+        hitRect.set(frame.x(790f), frame.y(1240f), frame.x(1040f), frame.y(1356f))
+        hitRect.offset(camera * FRONT_PARALLAX, 0f)
+        if (hitRect.contains(x, y)) {
+            val already = hologram.isServingRamen(t)
+            hologram.serveRamen(t, RAMEN_SECONDS)
+            return if (already) Tap.CONSUMED else Tap.RAMEN_HOLOGRAM
+        }
+
         val l = hotel.darkElementBounds() ?: return Tap.NONE
         if (hotel.isRepaired) return Tap.NONE
-        val near = layerDx[3]
         hitRect.set(l.left + near, l.top, l.right + near, l.bottom)
         hitRect.inset(-frame.s(34f), -frame.s(34f))
         if (!hitRect.contains(x, y)) return Tap.NONE
@@ -215,6 +258,15 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
             if (blackoutT > Blackout.TOTAL) blackoutT = -1f
         }
         skyline.update(t)
+        // 一楽 holds for the clone show, flickering in and out like a channel change.
+        val since = t - ichirakuFrom
+        val showIchiraku = when {
+            since < 0f || since > ICHIRAKU_SECONDS -> false
+            since < 0.6f || since > ICHIRAKU_SECONDS - 0.6f -> hash(kotlin.math.floor(t * 14f).toInt(), 5) > 0.5f
+            else -> true
+        }
+        ichiraku.visible = showIchiraku
+        ramenSign.visible = !showIchiraku
         for ((i, s) in signs.withIndex()) {
             // Signs restart in a staggered order after a blackout.
             s.powerScale = Blackout.power(blackoutT, 0.15f + 0.55f * i / signs.size)
@@ -225,6 +277,7 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
         hologram.updateHitBox(layerDx[2])
         market.update(dt)
         pedestrians.update(dt, frame.width)
+        ninjas.update(dt)
         rain.update(dt)
         lightning.update(dt)
         fireworks.update(dt)
@@ -268,6 +321,7 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
         skyline.drawTowerLights(canvas, sprites, t, layerDx[2], towerLevel * late)
         skyline.drawTowerLabel(canvas, t, layerDx[2], towerLevel, late)
         hologram.drawProjection(canvas, t, layerDx[2], late)
+        hologram.drawRamen(canvas, t, layerDx[2], late)
         // In its beam the koi swims behind the street front; loose and golden, it flies over it.
         val koiInFront = hologram.freedom > 0.5f
         if (!koiInFront) hologram.drawKoi(canvas, t, layerDx[2], late)
@@ -283,11 +337,13 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
         street.drawReflection(canvas, t, front, signs, near, Blackout.power(b, 0.5f)) { c ->
             market.drawBulbs(c, t, front, 0.5f, b)
             pedestrians.draw(c, front, 0.28f)
+            if (ninjas.running) ninjas.draw(c, front, 0.3f)
         }
         street.drawKerb(canvas)
         market.drawStalls(canvas, t, front, b)
         market.drawSteam(canvas, front)
         pedestrians.draw(canvas, front)
+        if (ninjas.running) ninjas.draw(canvas, front)
 
         rain.drawSplashes(canvas)
         rain.drawDrops(canvas)
@@ -301,5 +357,15 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
         /** Max seconds between taps that still count toward an easter egg. */
         const val TAP_WINDOW = 1.6f
         const val GOLDEN_KOI_SECONDS = 60f
+        const val RAMEN_SECONDS = 30f
+        const val ICHIRAKU_SECONDS = 11f
     }
 }
+
+/** Screen hit boxes of the easter eggs, for tests. */
+internal data class EggTargets(
+    val hotelL: android.graphics.RectF,
+    val koi: android.graphics.RectF,
+    val ramenSign: android.graphics.RectF,
+    val ramenStall: android.graphics.RectF,
+)

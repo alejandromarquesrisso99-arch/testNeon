@@ -11,6 +11,7 @@ import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
 import com.district9.neonsteps.ui.Neon
+import kotlin.math.sin
 
 /** A rooftop light that pulses, so the skyline never sits perfectly still. */
 internal class Beacon(val x: Float, val y: Float, val color: Int, val period: Float, val phase: Float, val layer: Int)
@@ -90,6 +91,20 @@ internal class Skyline(private val frame: SceneFrame, private val maxShift: Floa
     private val labelGlow = Paint(labelPaint).apply { alpha = 70; strokeWidth = frame.s(4f); style = Paint.Style.STROKE }
     private val rng = Rng(61)
 
+    // Tower 61's facade, recorded while baking so its bands can light up for the goal.
+    private var towerL = 0f
+    private var towerR = 0f
+    private var towerT = 0f
+    private var bandTop = 0f
+    private var bandCount = 0
+    private val bandStep = frame.s(13f)
+    private val bandH = frame.s(3f)
+    private val towerFill = Paint()
+    private val towerLine = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+    }
+
     private class Spec(
         val color: Int,
         val haze: Float,
@@ -100,7 +115,10 @@ internal class Skyline(private val frame: SceneFrame, private val maxShift: Floa
         val parallax: Float,
     )
 
-    private class Block(val l: Float, val t: Float, val r: Float, val crown: Int = 0, val antenna: Boolean = false)
+    private class Block(
+        val l: Float, val t: Float, val r: Float,
+        val crown: Int = 0, val antenna: Boolean = false, val isTower61: Boolean = false,
+    )
 
     init {
         val specs = listOf(
@@ -112,7 +130,7 @@ internal class Skyline(private val frame: SceneFrame, private val maxShift: Floa
         layers = specs.mapIndexed { index, spec ->
             val margin = marginFor(spec.parallax)
             val blocks = when (index) {
-                2 -> proceduralBlocks(spec, margin, avoid = 470f to 650f) + Block(495f, 690f, 625f, crown = 2)
+                2 -> proceduralBlocks(spec, margin, avoid = 470f to 650f) + Block(495f, 690f, 625f, crown = 2, isTower61 = true)
                 // Hand-placed street front, extended with generated towers for when you pan.
                 3 -> proceduralBlocks(spec, margin, avoid = -60f to 1160f) + nearBlocks()
                 else -> proceduralBlocks(spec, margin, avoid = null)
@@ -208,10 +226,20 @@ internal class Skyline(private val frame: SceneFrame, private val maxShift: Floa
                 2 -> { // Tower 61: banded facade and a projector deck
                     c.drawRect(l + w * 0.32f, t - frame.s(26f), r - w * 0.32f, t + 1, body)
                     val band = Paint().apply { color = Neon.mix(spec.color, 0xFF000000.toInt(), 0.45f) }
+                    var bands = 0
                     var y = t + frame.s(52f)
                     while (y < frame.horizon) {
-                        c.drawRect(l + frame.s(6f), y, r - frame.s(6f), y + frame.s(3f), band)
-                        y += frame.s(13f)
+                        c.drawRect(l + frame.s(6f), y, r - frame.s(6f), y + bandH, band)
+                        y += bandStep
+                        bands++
+                    }
+                    // Other banded towers share the look; only the real Tower 61 lights up.
+                    if (b.isTower61) {
+                        towerL = l
+                        towerR = r
+                        towerT = t
+                        bandTop = t + frame.s(52f)
+                        bandCount = bands
                     }
                 }
                 3 -> { // set-back crown
@@ -283,14 +311,61 @@ internal class Skyline(private val frame: SceneFrame, private val maxShift: Floa
     fun drawLayer(canvas: Canvas, index: Int, dx: Float) = layers[index].draw(canvas, dx)
 
     /** "TOWER 61" lettering on the mid-layer tower, a steady, slightly tired teal. */
-    fun drawTowerLabel(canvas: Canvas, t: Float, dx: Float) {
+    /** "TOWER 61" lettering: a tired teal, blazing white-cyan when [lit] (the goal is met). */
+    fun drawTowerLabel(canvas: Canvas, t: Float, dx: Float, lit: Float = 0f) {
         val x = frame.x(503f) + dx
         val y = frame.y(724f)
-        val hum = 0.75f + 0.25f * noise1(t * 3f, 61)
-        labelGlow.alpha = (60 * hum).toInt()
+        val hum = lerp(0.75f + 0.25f * noise1(t * 3f, 61), 1f, lit)
+        labelGlow.color = Neon.mix(Neon.TEAL, Neon.CYAN, lit)
+        labelGlow.alpha = ((60 + 110 * lit) * hum).toInt()
         canvas.drawText("TOWER 61", x, y, labelGlow)
-        labelPaint.alpha = (215 * hum).toInt()
+        labelPaint.color = Neon.mix(Neon.TEAL, 0xFFE6FDFF.toInt(), lit)
+        labelPaint.alpha = ((215 + 40 * lit) * hum).toInt()
         canvas.drawText("TOWER 61", x, y, labelPaint)
+    }
+
+    /**
+     * Tower 61 lit for the goal: facade bands power on floor by floor from the street up as
+     * [level] rises to 1, in a magenta-to-cyan gradient with a light chase running up them.
+     */
+    fun drawTowerLights(canvas: Canvas, sprites: Sprites, t: Float, dx: Float, level: Float) {
+        if (level <= 0.005f || bandCount == 0) return
+        val l = towerL + dx
+        val r = towerR + dx
+        sprites.drawBlob(canvas, (l + r) / 2f, towerT + frame.s(150f), (r - l) * 1.7f, frame.s(280f), Neon.CYAN, 0.18f * level)
+
+        val lit = level * (bandCount + 4)
+        for (j in 0 until bandCount) {
+            val fromBottom = bandCount - 1 - j
+            val on = (lit - fromBottom).coerceIn(0f, 1f)
+            if (on <= 0f) continue
+            val chase = 0.6f + 0.4f * sin(t * 4f - fromBottom * 0.45f)
+            val c = Neon.mix(Neon.MAGENTA, Neon.CYAN, 1f - j / bandCount.toFloat()) // cyan crown, magenta base
+            val y = bandTop + j * bandStep
+            towerFill.color = Neon.alpha(c, 0.28f * on * chase)
+            canvas.drawRect(l + frame.s(4f), y - frame.s(3f), r - frame.s(4f), y + bandH + frame.s(3f), towerFill)
+            towerFill.color = Neon.alpha(Neon.mix(c, 0xFFFFFFFF.toInt(), 0.3f), on * chase)
+            canvas.drawRect(l + frame.s(6f), y, r - frame.s(6f), y + bandH, towerFill)
+        }
+
+        // Once fully lit, the edges and crown trace themselves in neon.
+        val edge = smoothstep(0.85f, 1f, level)
+        if (edge <= 0f) return
+        val w = r - l
+        val crownL = l + w * 0.32f
+        val crownR = r - w * 0.32f
+        val crownT = towerT - frame.s(26f)
+        for (pass in 0..1) {
+            towerLine.strokeWidth = frame.s(if (pass == 0) 8f else 2.4f)
+            towerLine.color = Neon.alpha(if (pass == 0) Neon.CYAN else 0xFFE6FDFF.toInt(), edge * if (pass == 0) 0.25f else 0.95f)
+            canvas.drawLine(l + frame.s(1f), frame.horizon, l + frame.s(1f), towerT, towerLine)
+            canvas.drawLine(l + frame.s(1f), towerT, crownL, towerT, towerLine)
+            canvas.drawLine(crownL, towerT, crownL, crownT, towerLine)
+            canvas.drawLine(crownL, crownT, crownR, crownT, towerLine)
+            canvas.drawLine(crownR, crownT, crownR, towerT, towerLine)
+            canvas.drawLine(crownR, towerT, r - frame.s(1f), towerT, towerLine)
+            canvas.drawLine(r - frame.s(1f), towerT, r - frame.s(1f), frame.horizon, towerLine)
+        }
     }
 
     /** @param layerDx parallax offset of each layer, indexed like [layers]. */

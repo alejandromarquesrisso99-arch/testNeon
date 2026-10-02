@@ -141,6 +141,23 @@ class StepRepository internal constructor(
         return (steps * 60_000L / spanMs).toInt().coerceAtMost(250)
     }
 
+    /** Today's goal is met; it stays met until midnight unless the goal is raised. */
+    fun goalReachedToday(): Boolean = stepsToday() >= goal
+
+    /** Whether today's "goal reached" notification has already been sent (once a day). */
+    fun goalNotifiedToday(): Boolean = prefs.getString(KEY_GOAL_NOTIFIED, null) == today().toString()
+
+    fun markGoalNotified() {
+        prefs.edit().putString(KEY_GOAL_NOTIFIED, today().toString()).apply()
+    }
+
+    /** Whether the in-app celebration has played today (it replays on the next open if missed). */
+    fun goalCelebratedToday(): Boolean = prefs.getString(KEY_GOAL_CELEBRATED, null) == today().toString()
+
+    fun markGoalCelebrated() {
+        prefs.edit().putString(KEY_GOAL_CELEBRATED, today().toString()).apply()
+    }
+
     /** The last [days] days, oldest first, ending with today. */
     fun history(days: Int): List<DayEntry> {
         rollOverIfNeeded()
@@ -222,6 +239,8 @@ class StepRepository internal constructor(
         private const val KEY_LAST_BOOT = "last_boot"
         private const val KEY_GOAL = "goal"
         private const val KEY_RAIN = "rain_mode"
+        private const val KEY_GOAL_NOTIFIED = "goal_notified_on"
+        private const val KEY_GOAL_CELEBRATED = "goal_celebrated_on"
         private const val KEEP_DAYS = 60
         private const val PERSIST_DELAY_MS = 3_000L
         private const val CADENCE_SAMPLES = 128

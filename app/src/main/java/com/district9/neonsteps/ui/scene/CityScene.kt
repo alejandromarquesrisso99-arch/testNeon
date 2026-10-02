@@ -25,6 +25,7 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
     private val street = WetStreet(frame, frontMargin)
     private val rain = Rain(frame)
     private val lightning = Lightning(frame)
+    private val fireworks = Fireworks(frame, sprites)
 
     private val signs: List<NeonSign> = listOf(
         NeonSign.vertical(
@@ -81,6 +82,15 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
     /** 0 standing still … 1 brisk walk. Feeds the koi. */
     var activity = 0f
 
+    /** Goal met today: Tower 61 lights up and fireworks fill the sky until midnight. */
+    var celebrating = false
+        set(value) {
+            field = value
+            fireworks.active = value
+        }
+    private var towerLevel = 0f
+    private var secondStrikeAt = -1f
+
     private var rainTarget = 0.7f
 
     fun setRainIntensity(value: Float) {
@@ -94,6 +104,14 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
     }
 
     fun strike(strength: Float) = lightning.strike(strength)
+
+    /** The moment the goal falls: a double lightning strike and an opening salvo. */
+    fun celebrate() {
+        celebrating = true
+        lightning.strike(1f)
+        secondStrikeAt = time + 0.9f
+        fireworks.salvo()
+    }
 
     init {
         bakeReflection()
@@ -124,6 +142,13 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
         pedestrians.update(dt, frame.width)
         rain.update(dt)
         lightning.update(dt)
+        fireworks.update(dt)
+        if (secondStrikeAt in 0f..t) {
+            lightning.strike(0.8f)
+            secondStrikeAt = -1f
+        }
+        // Tower 61 powers on floor by floor, and dims faster if the goal is raised past you.
+        towerLevel = if (celebrating) (towerLevel + dt * 0.55f).coerceAtMost(1f) else (towerLevel - dt * 1.5f).coerceAtLeast(0f)
 
         if (t >= rebakeAt) {
             // Windows switch over time; refresh their blurred reflection now and then.
@@ -145,12 +170,14 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
             sprites.drawBlob(canvas, x, frame.y(smogY[i]), frame.s(smogR[i]), frame.s(smogR[i] * 0.45f), smogC[i], 0.42f)
         }
         sprites.drawBlob(canvas, w / 2f, frame.y(1180f), w * 0.85f, frame.s(300f), 0xFF8A1A70.toInt(), 0.32f)
+        if (fireworks.hasSomethingToDraw) fireworks.draw(canvas, camera * 0.06f)
         lightning.drawSky(canvas)
 
         skyline.drawLayer(canvas, 0, layerDx[0])
         skyline.drawLayer(canvas, 1, layerDx[1])
         skyline.drawLayer(canvas, 2, layerDx[2])
-        skyline.drawTowerLabel(canvas, t, layerDx[2])
+        skyline.drawTowerLights(canvas, sprites, t, layerDx[2], towerLevel)
+        skyline.drawTowerLabel(canvas, t, layerDx[2], towerLevel)
         hologram.draw(canvas, t, layerDx[2])
         skyline.drawLayer(canvas, 3, near)
         skyline.drawBeacons(canvas, sprites, t, layerDx)

@@ -38,7 +38,10 @@ class StepCounterService : Service(), SensorEventListener {
     private var lastNotifiedSteps = -1
     private var lastNotifyAt = 0L
 
-    private val repoListener = StepRepository.Listener { maybeUpdateNotification() }
+    private val repoListener = StepRepository.Listener {
+        maybeUpdateNotification()
+        maybeNotifyGoal()
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -51,6 +54,7 @@ class StepCounterService : Service(), SensorEventListener {
         }
         registerBestSensor()
         repo.addListener(repoListener)
+        maybeNotifyGoal()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -128,13 +132,34 @@ class StepCounterService : Service(), SensorEventListener {
         getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, buildNotification(steps))
     }
 
+    /** Once a day, when the goal falls: a sounding notification, unless the app is on screen. */
+    private fun maybeNotifyGoal() {
+        if (!repo.goalReachedToday() || repo.goalNotifiedToday()) return
+        repo.markGoalNotified()
+        if (MainActivity.isInForeground) return // the city celebrates on screen instead
+        val steps = repo.stepsToday()
+        val notification = Notification.Builder(this, GOAL_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_steps)
+            .setColor(getColor(R.color.neon_magenta))
+            .setContentTitle(getString(R.string.notif_goal_title))
+            .setContentText(getString(R.string.notif_goal_text, Format.steps(steps)))
+            .setStyle(Notification.BigTextStyle().bigText(getString(R.string.notif_goal_text, Format.steps(steps))))
+            .setContentIntent(openAppIntent())
+            .setAutoCancel(true)
+            .setCategory(Notification.CATEGORY_STATUS)
+            .build()
+        getSystemService(NotificationManager::class.java).notify(GOAL_NOTIFICATION_ID, notification)
+    }
+
+    private fun openAppIntent(): PendingIntent = PendingIntent.getActivity(
+        this,
+        0,
+        Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+
     private fun buildNotification(steps: Int): Notification {
-        val open = PendingIntent.getActivity(
-            this,
-            0,
-            Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
+        val open = openAppIntent()
         val goal = repo.goal
         return Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_steps)
@@ -158,13 +183,20 @@ class StepCounterService : Service(), SensorEventListener {
             description = getString(R.string.notif_channel_desc)
             setShowBadge(false)
         }
-        getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        val goals = NotificationChannel(
+            GOAL_CHANNEL_ID,
+            getString(R.string.notif_goal_channel),
+            NotificationManager.IMPORTANCE_DEFAULT,
+        ).apply { description = getString(R.string.notif_goal_channel_desc) }
+        getSystemService(NotificationManager::class.java).createNotificationChannels(listOf(channel, goals))
     }
 
     companion object {
         private const val TAG = "StepCounterService"
         private const val CHANNEL_ID = "steps"
         private const val NOTIFICATION_ID = 61
+        private const val GOAL_CHANNEL_ID = "goals"
+        private const val GOAL_NOTIFICATION_ID = 62
         private const val NOTIFY_INTERVAL_MS = 5_000L
 
         @Volatile

@@ -8,6 +8,7 @@ import android.view.View
 import com.district9.neonsteps.data.StepRepository
 import com.district9.neonsteps.ui.scene.SceneView
 import org.junit.After
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -93,6 +94,17 @@ class ScreenshotTest {
         touch(MotionEvent.ACTION_MOVE, 660f, 32)
         touch(MotionEvent.ACTION_MOVE, 500f, 48)
         render(activity, "panned.png", seconds = 1f)
+    }
+
+    @Test
+    fun goalReached() {
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        val repo = StepRepository.get(activity)
+        repo.addSteps(8_350)
+        // The missed celebration replays shortly after the app opens.
+        ShadowLooper.idleMainLooper(1, java.util.concurrent.TimeUnit.SECONDS)
+        assertTrue(repo.goalCelebratedToday())
+        render(activity, "goal.png", seconds = 2.6f)
     }
 
     @Test

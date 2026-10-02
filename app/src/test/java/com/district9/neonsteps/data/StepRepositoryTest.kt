@@ -2,6 +2,8 @@ package com.district9.neonsteps.data
 
 import android.content.Context
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -80,6 +82,24 @@ class StepRepositoryTest {
         // Steps taken while the app was dead are recovered from the cumulative counter.
         second.onStepCounter(10_800, bootCount = 1)
         assertEquals(800, second.stepsToday())
+    }
+
+    @Test
+    fun goalFlagsLastOneDay() {
+        val repo = repo()
+        repo.goal = 4_000
+        repo.addSteps(4_100)
+        assertTrue(repo.goalReachedToday())
+        assertFalse(repo.goalNotifiedToday())
+        repo.markGoalNotified()
+        repo.markGoalCelebrated()
+        assertTrue(repo.goalNotifiedToday())
+        assertTrue(repo.goalCelebratedToday())
+
+        today = today.plusDays(1)
+        assertFalse(repo.goalReachedToday())
+        assertFalse(repo.goalNotifiedToday())
+        assertFalse(repo.goalCelebratedToday())
     }
 
     @Test

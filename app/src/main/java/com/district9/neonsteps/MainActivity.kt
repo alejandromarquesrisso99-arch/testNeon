@@ -102,6 +102,7 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
 
     override fun onStart() {
         super.onStart()
+        isInForeground = true
         repo.addListener(this)
         if (StepCounterService.hasActivityPermission(this)) StepCounterService.start(this)
         lastSteps = -1
@@ -112,6 +113,7 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
     }
 
     override fun onStop() {
+        isInForeground = false
         repo.removeListener(this)
         handler.removeCallbacks(tick)
         sensorManager?.unregisterListener(this)
@@ -169,14 +171,16 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
             },
         )
 
-        // Milestones strike lightning: every thousand steps, and twice for the goal.
-        if (lastSteps in 0 until steps) {
-            if (lastSteps < goal && steps >= goal) {
-                scene.strike(1f)
-                handler.postDelayed({ scene.strike(0.8f) }, 900)
-            } else if (steps / 1000 > lastSteps / 1000) {
-                scene.strike(0.6f)
-            }
+        // The goal: Tower 61 lit and fireworks until midnight. The celebration plays once a
+        // day — live if the app is open, otherwise the first time it's opened afterwards.
+        val goalMet = permitted && steps >= goal
+        scene.setCelebrating(goalMet)
+        if (goalMet && !repo.goalCelebratedToday()) {
+            repo.markGoalCelebrated()
+            // On opening the app, give the street a beat to appear before the show starts.
+            handler.postDelayed({ scene.celebrate() }, if (lastSteps < 0) 700L else 0L)
+        } else if (lastSteps in 0 until steps && steps / 1000 > lastSteps / 1000) {
+            scene.strike(0.6f) // every thousand steps
         }
         lastSteps = steps
     }
@@ -226,7 +230,8 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
             if (steps < goal) {
                 add(TickerItem("FALTAN ${Format.steps(goal - steps)} PASOS PARA LA META"))
             } else {
-                add(TickerItem("META CUMPLIDA · LA TORRE 61 TE SALUDA", highlight = true))
+                add(TickerItem("META CUMPLIDA · LA TORRE 61 SE ENCIENDE EN TU HONOR", highlight = true))
+                add(TickerItem("FUEGOS ARTIFICIALES SOBRE DISTRICT 9 HASTA MEDIANOCHE"))
             }
             add(TickerItem("DESLIZA EL DEDO PARA RECORRER EL DISTRITO", highlight = true))
             add(TickerItem("BOMBAS DE DRENAJE AL 140%"))
@@ -336,8 +341,13 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
         }
     }
 
-    private companion object {
-        const val REQUEST_PERMISSIONS = 9
-        const val KEY_ASKED = "asked_permissions"
+    companion object {
+        /** Read by the step service: while the app is on screen it celebrates there, not in a notification. */
+        @Volatile
+        var isInForeground = false
+            private set
+
+        private const val REQUEST_PERMISSIONS = 9
+        private const val KEY_ASKED = "asked_permissions"
     }
 }

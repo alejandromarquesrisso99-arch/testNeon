@@ -7,6 +7,7 @@ del día como título en neón.
 <p>
   <img src="docs/main.jpg" width="270" alt="Pantalla principal">
   <img src="docs/history.jpg" width="270" alt="Historial de 7 días">
+  <img src="docs/goal.jpg" width="270" alt="Meta cumplida: Torre 61 encendida y fuegos artificiales">
 </p>
 
 ## Instalar
@@ -29,7 +30,14 @@ compilada en otro ordenador, desinstala antes la anterior.
 - **LLUVIA**: AUTO (llueve más fuerte cuanto más rápido caminas), llovizna, lluvia o aguacero.
 - **Desliza el dedo** de lado a lado para recorrer la calle: cada capa de edificios se mueve a
   su propia velocidad (las lejanas apenas, el mercado más que nada) y al soltar vuelve sola.
-- Cada 1.000 pasos cae un relámpago; al llegar a la meta, dos. Toca la calle para invocar uno.
+- Cada 1.000 pasos cae un relámpago. Toca la calle para invocar uno.
+- **Al llegar a la meta**:
+  - Doble relámpago y una salva de fuegos artificiales. Si la app estaba cerrada, la
+    celebración se reproduce la primera vez que la abras ese día.
+  - Llega un aviso «¡META CUMPLIDA!» con sonido, una sola vez al día (si tienes la app abierta,
+    la celebración se ve en pantalla y no hace falta el aviso).
+  - La Torre 61 se enciende planta a planta en neón y se queda iluminada.
+  - Fuegos artificiales en el cielo, detrás de los edificios, hasta medianoche.
 - El noticiero **D9 WIRE** comenta tu caminata (y el letrero del HOTEL, que sigue sin su «L»).
 - Inclinar el móvil también desplaza un poco las capas.
 

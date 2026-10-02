@@ -32,6 +32,8 @@ class SceneView @JvmOverloads constructor(
     private var tilt: Float? = null
     private var activity = 0f
     private var pendingStrike = 0f
+    private var celebrating = false
+    private var pendingCelebration = false
 
     // Drag-to-pan state, kept here so it survives the scene being rebuilt.
     private var pan = 0f
@@ -59,6 +61,19 @@ class SceneView @JvmOverloads constructor(
     fun setActivity(value: Float) {
         activity = value
         scene?.activity = value
+    }
+
+    /** Goal met today: keep Tower 61 lit and fireworks going (survives scene rebuilds). */
+    fun setCelebrating(value: Boolean) {
+        celebrating = value
+        scene?.celebrating = value
+    }
+
+    /** Play the goal celebration once; deferred until the scene exists. */
+    fun celebrate() {
+        celebrating = true
+        val s = scene
+        if (s == null) pendingCelebration = true else s.celebrate()
     }
 
     fun strike(strength: Float) {
@@ -91,6 +106,11 @@ class SceneView @JvmOverloads constructor(
             s.setRainIntensity(rain)
             tilt?.let(s::setTilt)
             s.activity = activity
+            s.celebrating = celebrating
+            if (pendingCelebration) {
+                s.celebrate()
+                pendingCelebration = false
+            }
             if (pendingStrike > 0f) {
                 s.strike(pendingStrike)
                 pendingStrike = 0f

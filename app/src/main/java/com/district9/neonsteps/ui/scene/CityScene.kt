@@ -145,7 +145,13 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
         tiltTarget = x.coerceIn(-1f, 1f)
     }
 
-    fun strike(strength: Float) = lightning.strike(strength)
+    /** Where sound effects go; null keeps the street silent. */
+    var audio: SceneAudio? = null
+
+    fun strike(strength: Float) {
+        lightning.strike(strength)
+        audio?.thunder(strength)
+    }
 
     // --- Easter eggs -------------------------------------------------------------------------
 
@@ -173,7 +179,9 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
 
     /** Lights out across District 9; only the rain, the umbrellas and your steps keep glowing. */
     fun blackout() {
-        if (blackoutT < 0f) blackoutT = 0f
+        if (blackoutT >= 0f) return
+        blackoutT = 0f
+        audio?.powerDown()
     }
 
     /** Screen hit boxes of the HOTEL's "L" and the koi, for tests. */
@@ -202,6 +210,7 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
                 if (koiTaps >= 3) {
                     koiTaps = 0
                     hologram.release(t, GOLDEN_KOI_SECONDS)
+                    audio?.chime()
                     return Tap.GOLDEN_KOI
                 }
                 return Tap.CONSUMED
@@ -229,6 +238,7 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
         if (hitRect.contains(x, y)) {
             val already = hologram.isServingRamen(t)
             hologram.serveRamen(t, RAMEN_SECONDS)
+            if (!already) audio?.ding()
             return if (already) Tap.CONSUMED else Tap.RAMEN_HOLOGRAM
         }
 
@@ -241,6 +251,7 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
         lastHotelTap = t
         // Each tap shorts the tube: it spits sparks and fails to strike...
         hotel.poke(t)
+        audio?.sparks(if (hotelTaps < 5) 0.5f else 1f)
         signSparks.emit(l.centerX(), l.top + frame.s(6f), 5 + hotelTaps * 2, 0xFF9FF6FF.toInt(), frame.s(260f), frame.s(1100f), 0.6f)
         if (hotelTaps < 5) return Tap.CONSUMED
         // ...until the fifth, when it catches with a shower of sparks onto the street.
@@ -254,13 +265,15 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
     /** The moment the goal falls: a double lightning strike and an opening salvo. */
     fun celebrate() {
         celebrating = true
-        lightning.strike(1f)
+        strike(1f)
         secondStrikeAt = time + 0.9f
         fireworks.salvo()
     }
 
     init {
         bakeReflection()
+        fireworks.onBurst = { audio?.firework(it) }
+        ninjas.onPoof = { audio?.poof(it) }
     }
 
     private fun bakeReflection() {
@@ -281,6 +294,7 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
         for (i in 0 until 4) layerDx[i] = camera * skyline.layers[i].parallax
 
         rain.intensity += (rainTarget - rain.intensity) * (dt * 0.8f).coerceAtMost(1f)
+        audio?.ambience(rain.intensity, Blackout.power(blackoutT, 0.5f))
         if (blackoutT >= 0f) {
             blackoutT += dt
             if (blackoutT > Blackout.TOTAL) blackoutT = -1f
@@ -312,7 +326,7 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
         lightning.update(dt)
         fireworks.update(dt)
         if (secondStrikeAt in 0f..t) {
-            lightning.strike(0.8f)
+            strike(0.8f)
             secondStrikeAt = -1f
         }
         // Tower 61 powers on floor by floor, and dims faster if the goal is raised past you.

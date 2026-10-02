@@ -47,6 +47,9 @@ internal class NinjaSquad(private val frame: SceneFrame, private val sprites: Sp
 
     val running: Boolean get() = showT >= 0f
 
+    /** Told of each poof (big = the clone jutsu itself). */
+    var onPoof: ((Boolean) -> Unit)? = null
+
     /** Start the show at the stall's x (screen coords, before parallax). */
     fun start(stallX: Float) {
         showT = 0f
@@ -77,6 +80,7 @@ internal class NinjaSquad(private val frame: SceneFrame, private val sprites: Sp
     }
 
     private fun poof(cx: Float, cy: Float, big: Boolean) {
+        onPoof?.invoke(big)
         repeat(if (big) 10 else 7) {
             val i = puffCursor
             puffCursor = (puffCursor + 1) % maxPuffs

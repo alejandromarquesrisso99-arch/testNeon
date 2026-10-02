@@ -28,6 +28,15 @@ compilada en otro ordenador, desinstala antes la anterior.
 - **META**: toca para cambiar la meta diaria (4.000 – 20.000 pasos).
 - **HISTORIAL**: últimos 7 días con la línea de meta; toca una columna para ver su valor.
 - **LLUVIA**: AUTO (llueve más fuerte cuanto más rápido caminas), llovizna, lluvia o aguacero.
+- **SONIDO**: lluvia, zumbido de neones, truenos tras cada rayo y los efectos de la ciudad,
+  todo generado por la app (desactivado por defecto).
+- **Perfil**: toca el panel de datos para poner tu altura y peso; la distancia (zancada = 41,4 %
+  de la altura) y las calorías (0,75 kcal por kg y km) se ajustan a ti.
+- **Rachas**: días seguidos cumpliendo la meta. District 9 crece con ellas y conserva lo ganado
+  mientras dure la racha: letrero «ファイト» (2 días), puesto de dango (3), farolillos (5), un
+  segundo koi (7), un dirigible con tu racha (14) y, a los 30, la «L» del HOTEL arreglada para siempre.
+- **Widget** para la pantalla de inicio con tus pasos en neón; la Torre 61 se enciende y hay
+  fuegos artificiales al cumplir la meta.
 - **Desliza el dedo** de lado a lado para recorrer la calle: cada capa de edificios se mueve a
   su propia velocidad (las lejanas apenas, el mercado más que nada) y al soltar vuelve sola.
 - Cada 1.000 pasos cae un relámpago. Toca la calle para invocar uno.
@@ -73,7 +82,7 @@ El noticiero D9 WIRE da la exclusiva de cada uno.
 - Los pasos se cuentan desde la instalación; el día cambia a medianoche (hora local).
 - Si el móvil no tiene podómetro, usa el detector de pasos y, como último recurso, el
   acelerómetro (que solo cuenta con la pantalla encendida).
-- Distancia y calorías son estimaciones: zancada de 0,75 m y 0,04 kcal por paso.
+- Distancia y calorías son estimaciones: sin perfil se usan 0,75 m por paso y 70 kg.
 
 ## Compilar
 

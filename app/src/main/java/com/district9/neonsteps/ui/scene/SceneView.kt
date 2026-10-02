@@ -121,6 +121,12 @@ class SceneView @JvmOverloads constructor(
         }
 
     private var streak = 0
+    private var audio: SceneAudio? = null
+
+    fun setAudio(value: SceneAudio?) {
+        audio = value
+        scene?.audio = value
+    }
 
     /** Days in a row meeting the goal: District 9 grows with it. */
     fun setStreak(days: Int) {
@@ -185,6 +191,7 @@ class SceneView @JvmOverloads constructor(
             s.celebrating = celebrating
             s.hotelFixed = hotelFixed
             s.streak = streak
+            s.audio = audio
             if (pendingCelebration) {
                 s.celebrate()
                 pendingCelebration = false

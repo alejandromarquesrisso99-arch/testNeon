@@ -21,6 +21,7 @@ import android.view.WindowInsets
 import android.window.OnBackInvokedCallback
 import android.window.OnBackInvokedDispatcher
 import android.widget.Toast
+import com.district9.neonsteps.audio.AmbientSound
 import com.district9.neonsteps.data.RainMode
 import com.district9.neonsteps.data.SensorMode
 import com.district9.neonsteps.data.StepRepository
@@ -50,6 +51,8 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
     private lateinit var goalButton: NeonButtonView
     private lateinit var historyButton: NeonButtonView
     private lateinit var rainButton: NeonButtonView
+    private lateinit var soundButton: NeonButtonView
+    private val ambient = AmbientSound()
     private lateinit var ticker: TickerView
     private lateinit var history: HistoryView
     private lateinit var profile: ProfileView
@@ -81,6 +84,7 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
         goalButton = findViewById(R.id.btn_goal)
         historyButton = findViewById(R.id.btn_history)
         rainButton = findViewById(R.id.btn_rain)
+        soundButton = findViewById(R.id.btn_sound)
         ticker = findViewById(R.id.ticker)
         history = findViewById(R.id.history)
         profile = findViewById(R.id.profile)
@@ -88,6 +92,12 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
         goalButton.accent = Neon.CYAN
         historyButton.accent = Neon.YELLOW
         rainButton.accent = Neon.MAGENTA
+        soundButton.accent = Neon.VIOLET
+        soundButton.setOnClickListener {
+            repo.soundOn = !repo.soundOn
+            if (repo.soundOn) ambient.start() else ambient.stop()
+        }
+        scene.setAudio(ambient)
 
         goalButton.setOnClickListener { cycleGoal() }
         historyButton.setOnClickListener { if (history.isOpen) closeHistory() else openHistory() }
@@ -126,6 +136,7 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
     override fun onStart() {
         super.onStart()
         isInForeground = true
+        if (repo.soundOn) ambient.start()
         repo.addListener(this)
         if (StepCounterService.hasActivityPermission(this)) StepCounterService.start(this)
         lastSteps = -1
@@ -137,6 +148,7 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
 
     override fun onStop() {
         isInForeground = false
+        ambient.stop()
         StepsWidget.refresh(this, force = true) // leave the home screen up to date
         repo.removeListener(this)
         handler.removeCallbacks(tick)
@@ -185,6 +197,8 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
             },
         )
         rainButton.setText(getString(R.string.btn_rain), rainLabel, getString(R.string.cd_rain_button, rainLabel))
+        val soundLabel = getString(if (repo.soundOn) R.string.sound_on else R.string.sound_off)
+        soundButton.setText(getString(R.string.btn_sound), soundLabel, getString(R.string.cd_sound_button, soundLabel))
 
         val walk = (cadence / 120f).coerceIn(0f, 1f)
         scene.setActivity(walk)

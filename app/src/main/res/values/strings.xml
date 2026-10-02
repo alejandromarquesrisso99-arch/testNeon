@@ -20,6 +20,10 @@
     <string name="btn_history_value">7 DÍAS</string>
     <string name="btn_history_close">CERRAR</string>
     <string name="btn_rain">LLUVIA</string>
+    <string name="btn_sound">SONIDO</string>
+    <string name="sound_on">ON</string>
+    <string name="sound_off">OFF</string>
+    <string name="cd_sound_button">Sonido ambiente: %1$s. Toca para cambiarlo.</string>
     <string name="rain_auto">AUTO</string>
     <string name="rain_drizzle">LLOVIZNA</string>
     <string name="rain_rain">LLUVIA</string>

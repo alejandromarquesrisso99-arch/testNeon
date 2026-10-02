@@ -64,6 +64,9 @@ internal class Fireworks(private val frame: SceneFrame, private val sprites: Spr
     private val highest = frame.height * 0.17f
     private val lowest = maxOf(frame.y(520f), highest + frame.s(160f))
 
+    /** Told of each burst with its size (≈0.8–1.3), for the distant bang. */
+    var onBurst: ((Float) -> Unit)? = null
+
     /** While true, shells keep launching; switching off lets the sky empty out naturally. */
     var active = false
         set(value) {
@@ -111,6 +114,7 @@ internal class Fireworks(private val frame: SceneFrame, private val sprites: Spr
         b.cy = shell.y
         b.age = 0f
         val size = rng.range(0.8f, 1.3f)
+        onBurst?.invoke(size)
         val speed = frame.s(390f) * size
         when (shell.type) {
             WILLOW -> {

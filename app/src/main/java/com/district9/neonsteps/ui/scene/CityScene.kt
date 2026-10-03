@@ -121,6 +121,9 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
             traffic.density = look.traffic
         }
 
+    /** The free corner beside the step count, where the hologram is projected. */
+    fun setHologramZone(zone: android.graphics.RectF) = hologram.setZone(zone)
+
     // Unlockable styles (rewards for daily missions).
     fun setStyle(rainColor: Int, koi: IntArray?, aurora: Boolean, moon: Boolean) {
         rain.color = rainColor
@@ -416,9 +419,11 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
         skyline.drawTowerLights(canvas, sprites, t, layerDx[2], towerLevel * late)
         skyline.drawTowerLabel(canvas, t, layerDx[2], towerLevel, late)
         hologram.drawProjection(canvas, t, layerDx[2], late)
-        hologram.drawRamen(canvas, t, layerDx[2], late)
-        // In its beam the koi swims behind the street front; loose and golden, it flies over it.
-        val koiInFront = hologram.freedom > 0.5f
+        // Above Tower 61 the koi swims behind the street front; up in its corner, or loose and
+        // golden, it's drawn over it.
+        val corner = hologram.inCorner
+        if (!corner) hologram.drawRamen(canvas, t, layerDx[2], late)
+        val koiInFront = corner || hologram.freedom > 0.5f
         if (!koiInFront) hologram.drawKoi(canvas, t, layerDx[2], late)
         if (airshipOn) airship.draw(canvas, camera * 0.25f)
         traffic.drawLane(canvas, 1, camera)
@@ -430,6 +435,7 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
         signSparks.draw(canvas, near)
         if (lanternsOn) lanterns.draw(canvas, near)
         traffic.drawLane(canvas, 2, camera)
+        if (corner) hologram.drawRamen(canvas, t, layerDx[2], late)
         if (koiInFront) hologram.drawKoi(canvas, t, layerDx[2], late)
 
         street.drawGround(canvas)

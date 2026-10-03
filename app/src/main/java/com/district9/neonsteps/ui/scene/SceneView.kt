@@ -171,6 +171,15 @@ class SceneView @JvmOverloads constructor(
         blackoutTrigger.set(region)
     }
 
+    private val hologramZone = RectF()
+
+    /** Where the header leaves the sky clear (top right): the koi and the ramen float there. */
+    fun setHologramZone(region: RectF) {
+        if (region == hologramZone) return
+        hologramZone.set(region)
+        scene?.setHologramZone(region)
+    }
+
     /** Goal met today: keep Tower 61 lit and fireworks going (survives scene rebuilds). */
     fun setCelebrating(value: Boolean) {
         celebrating = value
@@ -212,6 +221,7 @@ class SceneView @JvmOverloads constructor(
         val horizon = if (streetLimit > 0f) (streetLimit - h * 0.075f).coerceIn(h * 0.52f, h * 0.72f) else h * 0.705f
         return CityScene(fonts, w, h, horizon, hour).also { s ->
             style(s)
+            if (!hologramZone.isEmpty) s.setHologramZone(hologramZone)
             s.setRainIntensity(rain)
             tilt?.let(s::setTilt)
             s.activity = activity

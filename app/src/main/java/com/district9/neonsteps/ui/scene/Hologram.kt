@@ -71,6 +71,23 @@ internal class Hologram(
     private val coneLeft = frame.x(342f)
     private val coneRight = frame.x(762f)
 
+    // Where the projection floats. Above Tower 61 by default; once the screen says where its
+    // header leaves room (see [setZone]), up in the top-right corner, clear of the readouts.
+    private var anchored = false
+    private var anchorX = frame.x(655f)
+    private var anchorY = frame.y(405f)
+    private var orbitX = frame.s(62f)
+    private var orbitY = frame.s(24f)
+    private var companionX = frame.x(650f)
+    private var companionY = frame.y(322f)
+    private var companionOrbit = frame.s(85f)
+    private var bowlX = frame.x(655f)
+    private var bowlBaseY = frame.y(395f)
+    private var bowlR = frame.s(80f)
+
+    /** Parallax of the projection: in the corner it barely drifts, so it stays clear of the text. */
+    private val drift: Float get() = if (anchored) 0.35f else 1f
+
     // Where the koi is (before parallax) and how fast it's moving sideways.
     private var kx = beamX(0f)
     private var ky = beamY(0f)
@@ -117,6 +134,33 @@ internal class Hologram(
     /** How much the koi has left the beam (0..1), for draw ordering. */
     val freedom: Float get() = gold
 
+    /**
+     * The free corner beside the step count, in scene pixels: the koi, its companion and the
+     * ramen bowl are placed inside it.
+     */
+    fun setZone(zone: RectF) {
+        if (zone.width() <= 0f || zone.height() <= 0f) return
+        anchored = true
+        val cx = zone.centerX()
+        anchorX = cx
+        anchorY = zone.centerY() + zone.height() * 0.1f
+        orbitX = minOf(frame.s(30f), zone.width() * 0.12f)
+        orbitY = minOf(frame.s(16f), zone.height() * 0.06f)
+        companionX = cx - frame.s(6f)
+        companionY = zone.centerY() - zone.height() * 0.24f
+        companionOrbit = minOf(frame.s(40f), zone.width() * 0.16f)
+        bowlR = minOf(frame.s(80f), zone.height() / 2.5f)
+        bowlX = cx - bowlR * 0.05f
+        bowlBaseY = zone.top + (zone.height() - 2.38f * bowlR) / 2f + 1.3f * bowlR
+        beamPaint.shader = beamShader(anchorY + frame.s(30f))
+    }
+
+    private fun beamShader(endY: Float) = LinearGradient(
+        0f, projY, 0f, endY,
+        Neon.alpha(Neon.CYAN, 0.30f), Neon.alpha(Neon.CYAN, if (anchored) 0.04f else 0.02f),
+        Shader.TileMode.CLAMP,
+    )
+
     init {
         conePath.moveTo(projX, projY)
         conePath.lineTo(coneLeft, coneTopY)
@@ -127,15 +171,14 @@ internal class Hologram(
             Neon.alpha(Neon.CYAN, 0.05f), Neon.alpha(0xFF3DA8FF.toInt(), 0.26f),
             Shader.TileMode.CLAMP,
         )
-        beamPaint.shader = LinearGradient(
-            0f, projY, 0f, frame.y(405f),
-            Neon.alpha(Neon.CYAN, 0.30f), Neon.alpha(Neon.CYAN, 0.02f),
-            Shader.TileMode.CLAMP,
-        )
+        beamPaint.shader = beamShader(frame.y(405f))
     }
 
-    private fun beamX(tr: Float) = frame.x(655f) + frame.s(62f) * sin(tr)
-    private fun beamY(tr: Float) = frame.y(405f) + frame.s(24f) * sin(tr * 2f + 0.8f)
+    private fun beamX(tr: Float) = anchorX + orbitX * sin(tr)
+    private fun beamY(tr: Float) = anchorY + orbitY * sin(tr * 2f + 0.8f)
+
+    /** In the corner the projection is drawn over the street front instead of behind it. */
+    val inCorner: Boolean get() = anchored
 
     /** A tap on the koi: it glitches and darts. */
     fun poke(t: Float) {
@@ -179,8 +222,8 @@ internal class Hologram(
 
         // The companion circles the other way round, higher up the beam.
         val c2 = -travel * 1.15f + 2.6f
-        val n2x = frame.x(650f) + frame.s(85f) * sin(c2)
-        val n2y = frame.y(322f) + frame.s(18f) * sin(c2 * 2f + 0.3f)
+        val n2x = companionX + companionOrbit * sin(c2)
+        val n2y = companionY + orbitY * 0.75f * sin(c2 * 2f + 0.3f)
         if (dt > 0f) k2vx += ((n2x - k2x) / dt - k2vx) * (dt * 8f).coerceAtMost(1f)
         k2x = n2x
         k2y = n2y
@@ -210,16 +253,15 @@ internal class Hologram(
         }
     }
 
-    private val bowlX = frame.x(655f)
-    private fun bowlY(t: Float) = frame.y(395f) + frame.s(6f) * sin(t * 1.3f)
+    private fun bowlY(t: Float) = bowlBaseY + frame.s(6f) * sin(t * 1.3f)
 
     /** The ramen bowl hologram: bowl, broth, egg, nori, a spinning narutomaki, noodles and steam. */
     fun drawRamen(canvas: Canvas, t: Float, dx: Float, power: Float) {
         if (!bowlVisible) return
         val f = flicker(t) * power
         if (f <= 0.01f) return
-        val r = frame.s(80f)
-        val bx = bowlX + dx
+        val r = bowlR
+        val bx = bowlX + dx * drift
         val by = bowlY(t)
 
         // Broth.
@@ -313,7 +355,7 @@ internal class Hologram(
 
     /** Refresh the tap target for the current parallax offset [dx] (same placement as [drawKoi]). */
     fun updateHitBox(dx: Float) {
-        val x = kx + lerp(dx, dx * 0.2f, gold)
+        val x = kx + lerp(dx * drift, dx * 0.2f, gold)
         koiRect.set(x - length * 0.55f, ky - length * 0.3f, x + length * 0.55f, ky + length * 0.3f)
     }
 
@@ -339,8 +381,9 @@ internal class Hologram(
         // The beam feeds whatever is projected: the koi, or the bowl while ramen is served.
         val beamAlpha = f * if (bowlVisible) 1f else 1f - smoothstep(0f, 0.6f, gold)
         if (beamAlpha > 0.01f) {
-            val tx = if (bowlVisible) bowlX else kx
-            val ty = if (bowlVisible) bowlY(t) + frame.s(70f) else ky + frame.s(30f)
+            // (The canvas follows Tower 61; the projection itself may drift less.)
+            val tx = (if (bowlVisible) bowlX else kx) + dx * (drift - 1f)
+            val ty = if (bowlVisible) bowlY(t) + bowlR * 0.88f else ky + frame.s(30f)
             beamPath.reset()
             beamPath.moveTo(projX - frame.s(5f), projY)
             beamPath.lineTo(tx - length * 0.42f, ty)
@@ -364,9 +407,9 @@ internal class Hologram(
      */
     fun drawKoi(canvas: Canvas, t: Float, dx: Float, power: Float) {
         // Loose in the sky it follows the far parallax, not Tower 61's.
-        val x = kx + lerp(dx, dx * 0.2f, gold) + if (t < glitchUntil) glitchDx else 0f
+        val x = kx + lerp(dx * drift, dx * 0.2f, gold) + if (t < glitchUntil) glitchDx else 0f
         val f = flicker(t) * maxOf(power, smoothstep(0.3f, 1f, gold))
-        glitter.draw(canvas, lerp(dx, dx * 0.2f, gold))
+        glitter.draw(canvas, lerp(dx * drift, dx * 0.2f, gold))
         if (f <= 0.01f) return
         // While ramen is on, the bowl takes the koi's place in the beam (a loose koi stays out).
         if (bowlVisible && gold < 0.5f) return
@@ -375,7 +418,7 @@ internal class Hologram(
         if (companion && !bowlVisible && f2 > 0.01f) {
             val face2 = -k2vx / (abs(k2vx) + frame.s(25f))
             val sq2 = (0.16f + 0.84f * abs(face2).pow(0.3f)) * if (face2 >= 0f) 1f else -1f
-            buildWireframe(k2x + dx, k2y, sq2, length * 0.78f)
+            buildWireframe(k2x + dx * drift, k2y, sq2, length * 0.78f)
             drawLines(canvas, frame.s(5f), Neon.alpha(Neon.MAGENTA, 0.10f * f2), 0f, 0f)
             drawLines(canvas, frame.s(1.6f), Neon.alpha(Neon.CYAN, 0.55f * f2), frame.s(3f), frame.s(1.2f))
             drawLines(canvas, frame.s(1.6f), Neon.alpha(Neon.MAGENTA, 0.9f * f2), -frame.s(1.5f), 0f)

@@ -128,6 +128,18 @@ class HeaderView @JvmOverloads constructor(
         out.set(paddingLeft.toFloat(), top - 10f * dp, (width - paddingRight).toFloat(), top + capHeight(title) + 14f * dp)
     }
 
+    /**
+     * The top-right corner, beside the step count and above the progress tube: clear of text
+     * for counts under 10.000. The city projects its hologram there.
+     */
+    fun hologramZone(out: RectF) {
+        val left = paddingLeft.toFloat()
+        val right = (width - paddingRight).toFloat()
+        val titleTop = paddingTop + capHeight(kickerBrand) + gapKicker
+        val tube = titleTop + capHeight(title) + gapSubtitle + capHeight(subtitle) + gapTube
+        out.set(right - (right - left) * 0.26f, titleTop - 6f * dp, right, tube - 12f * dp)
+    }
+
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val width = MeasureSpec.getSize(widthMeasureSpec)
         val avail = (width - paddingLeft - paddingRight).coerceAtLeast(1)

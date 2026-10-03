@@ -69,6 +69,7 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
     private var lastSteps = -1
     private var backCallback: Any? = null
     private val titleBand = RectF()
+    private val hologramZone = RectF()
 
     private val tick = object : Runnable {
         override fun run() {
@@ -134,6 +135,10 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
             header.titleBand(titleBand)
             titleBand.offset((v.left + overlay.left).toFloat(), (v.top + overlay.top).toFloat())
             scene.setBlackoutTrigger(titleBand)
+            // The koi and the ramen float in the corner the header leaves free.
+            header.hologramZone(hologramZone)
+            hologramZone.offset((v.left + overlay.left).toFloat(), (v.top + overlay.top).toFloat())
+            scene.setHologramZone(hologramZone)
         }
         missionCard.addOnLayoutChangeListener { v, _, top, _, _, _, _, _, _ ->
             scene.setStreetLimit(top.toFloat())

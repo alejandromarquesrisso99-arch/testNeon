@@ -40,6 +40,7 @@ class AmbientSound : SceneAudio {
     override fun powerDown() = whenRunning { synth.powerDown() }
     override fun chime() = whenRunning { synth.chime() }
     override fun ding() = whenRunning { synth.ding() }
+    override fun flyby() = whenRunning { synth.flyby() }
 
     private inline fun whenRunning(block: () -> Unit) {
         if (running) block()

@@ -9,6 +9,7 @@ import android.os.VibratorManager
 import android.view.MotionEvent
 import android.view.View
 import com.district9.neonsteps.data.StepRepository
+import com.district9.neonsteps.util.CityClock
 import com.district9.neonsteps.ui.scene.EasterEgg
 import com.district9.neonsteps.ui.scene.SceneView
 import org.junit.After
@@ -40,6 +41,7 @@ class EasterEggTest {
 
     @Before
     fun setUp() {
+        CityClock.fixed = java.time.LocalTime.of(22, 30)
         StepRepository.resetForTests()
         shadowOf(RuntimeEnvironment.getApplication()).grantPermissions(Manifest.permission.ACTIVITY_RECOGNITION)
         activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
@@ -55,7 +57,10 @@ class EasterEggTest {
     }
 
     @After
-    fun tearDown() = StepRepository.resetForTests()
+    fun tearDown() {
+        StepRepository.resetForTests()
+        CityClock.fixed = null
+    }
 
     private fun advance(seconds: Float) = repeat((seconds * 30).toInt()) { scene.advance(1f / 30f) }
 

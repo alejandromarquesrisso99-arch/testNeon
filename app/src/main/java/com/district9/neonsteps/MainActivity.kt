@@ -22,6 +22,8 @@ import android.window.OnBackInvokedCallback
 import android.window.OnBackInvokedDispatcher
 import android.widget.Toast
 import com.district9.neonsteps.audio.AmbientSound
+import com.district9.neonsteps.data.Cosmetics
+import com.district9.neonsteps.data.MissionState
 import com.district9.neonsteps.data.RainMode
 import com.district9.neonsteps.data.SensorMode
 import com.district9.neonsteps.data.StepRepository
@@ -31,15 +33,17 @@ import com.district9.neonsteps.ui.Neon
 import com.district9.neonsteps.ui.hud.HeaderView
 import com.district9.neonsteps.ui.hud.HistoryView
 import com.district9.neonsteps.ui.hud.HudPanelView
+import com.district9.neonsteps.ui.hud.MissionCardView
 import com.district9.neonsteps.ui.hud.NeonButtonView
 import com.district9.neonsteps.ui.hud.ProfileView
+import com.district9.neonsteps.ui.hud.StyleView
 import com.district9.neonsteps.ui.hud.TickerItem
 import com.district9.neonsteps.ui.hud.TickerView
 import com.district9.neonsteps.ui.scene.EasterEgg
 import com.district9.neonsteps.ui.scene.SceneView
+import com.district9.neonsteps.util.CityClock
 import com.district9.neonsteps.util.Format
 import com.district9.neonsteps.widget.StepsWidget
-import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
 class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
@@ -48,6 +52,7 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
     private lateinit var scene: SceneView
     private lateinit var header: HeaderView
     private lateinit var hud: HudPanelView
+    private lateinit var missionCard: MissionCardView
     private lateinit var goalButton: NeonButtonView
     private lateinit var historyButton: NeonButtonView
     private lateinit var rainButton: NeonButtonView
@@ -56,6 +61,7 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
     private lateinit var ticker: TickerView
     private lateinit var history: HistoryView
     private lateinit var profile: ProfileView
+    private lateinit var styles: StyleView
     private var sensorManager: SensorManager? = null
 
     private val handler = Handler(Looper.getMainLooper())
@@ -81,6 +87,7 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
         scene = findViewById(R.id.scene)
         header = findViewById(R.id.header)
         hud = findViewById(R.id.hud)
+        missionCard = findViewById(R.id.mission)
         goalButton = findViewById(R.id.btn_goal)
         historyButton = findViewById(R.id.btn_history)
         rainButton = findViewById(R.id.btn_rain)
@@ -88,6 +95,7 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
         ticker = findViewById(R.id.ticker)
         history = findViewById(R.id.history)
         profile = findViewById(R.id.profile)
+        styles = findViewById(R.id.styles)
 
         goalButton.accent = Neon.CYAN
         historyButton.accent = Neon.YELLOW
@@ -112,6 +120,9 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
             repo.heightCm = height
             repo.weightKg = weight
         }
+        missionCard.setOnClickListener { if (styles.isOpen) closeStyles() else openStyles() }
+        styles.onDismiss = ::closeStyles
+        styles.onSelect = { slot, id -> repo.setStyle(slot, id) }
         scene.setOnClickListener { scene.strike(0.55f) } // tap the street: thunder on demand
         scene.onEasterEgg = ::onEasterEgg
         ticker.provider = ::headlines
@@ -124,11 +135,11 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
             titleBand.offset((v.left + overlay.left).toFloat(), (v.top + overlay.top).toFloat())
             scene.setBlackoutTrigger(titleBand)
         }
-        hud.addOnLayoutChangeListener { v, _, top, _, _, _, _, _, _ ->
+        missionCard.addOnLayoutChangeListener { v, _, top, _, _, _, _, _, _ ->
             scene.setStreetLimit(top.toFloat())
-            // Keep the history modal between the title and the readouts.
-            history.setPadding(0, header.bottom, 0, (findViewById<View>(R.id.root).height - v.top).coerceAtLeast(0))
-            profile.setPadding(0, header.bottom, 0, (findViewById<View>(R.id.root).height - v.top).coerceAtLeast(0))
+            // Keep the modals between the title and the mission card.
+            val bottom = (findViewById<View>(R.id.root).height - v.top).coerceAtLeast(0)
+            for (modal in listOf(history, profile, styles)) modal.setPadding(0, header.bottom, 0, bottom)
         }
         if (savedInstanceState == null) requestMissingPermissions()
     }
@@ -178,10 +189,13 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
             else -> HeaderView.State.OK
         }
         header.setData(steps, goal, state)
-        hud.setData(LocalTime.now().format(clockFormat), Format.km(steps, repo.strideMeters), Format.kcal(steps, repo.kcalPerStep), percent)
+        val now = CityClock.now()
+        scene.setHour(now.hour + now.minute / 60f + now.second / 3600f)
+        hud.setData(now.format(clockFormat), Format.km(steps, repo.strideMeters), Format.kcal(steps, repo.kcalPerStep), percent)
 
         goalButton.setText(getString(R.string.btn_goal), Format.steps(goal), getString(R.string.cd_goal_button, Format.steps(goal)))
         if (profile.isOpen) profile.setData(repo.heightCm, repo.weightKg, repo.strideMeters, repo.kcalPerStep)
+        if (styles.isOpen) updateStyles()
         if (history.isOpen) {
             historyButton.setText(getString(R.string.btn_history), getString(R.string.btn_history_close), getString(R.string.cd_history_close))
             history.setData(repo.history(7), goal, streak)
@@ -217,11 +231,26 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
         scene.setStreak(streak)
         header.setStreak(streak)
 
+        // The day's mission, and the styles its rewards have unlocked.
+        val missionState = repo.evaluateMission()
+        val mission = repo.mission()
+        missionCard.setData(mission, repo.missionProgress(mission), missionState)
+        val sky = repo.style(Cosmetics.Slot.SKY)
+        scene.setStyle(
+            repo.style(Cosmetics.Slot.RAIN)?.color ?: SceneView.CLASSIC_RAIN,
+            repo.style(Cosmetics.Slot.KOI)?.koi,
+            aurora = sky?.id == "sky_aurora",
+            moon = sky?.id == "sky_moon",
+        )
+
         // The goal: Tower 61 lit and fireworks until midnight. The celebration plays once a
         // day — live if the app is open, otherwise the first time it's opened afterwards.
         val goalMet = permitted && steps >= goal
         scene.setCelebrating(goalMet)
+        val opening = lastSteps < 0
+        var goalShow = false
         if (goalMet && !repo.goalCelebratedToday()) {
+            goalShow = true
             repo.markGoalCelebrated()
             // On opening the app, give the street a beat to appear before the show starts.
             handler.postDelayed({
@@ -237,6 +266,25 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
             }, if (lastSteps < 0) 700L else 0L)
         } else if (lastSteps in 0 until steps && steps / 1000 > lastSteps / 1000) {
             scene.strike(0.6f) // every thousand steps
+        }
+
+        // A mission done: the card lights up, a salvo, and the wire breaks the news. Once a
+        // day, like the goal; if both fall together the mission waits for the goal's show.
+        if (missionState == MissionState.DONE && !repo.missionCelebrated()) {
+            repo.markMissionCelebrated()
+            val reward = mission.reward
+            val delay = (if (opening) 700L else 0L) + (if (goalShow) 4_500L else 0L)
+            handler.postDelayed({
+                missionCard.flash()
+                scene.missionComplete(big = reward == Cosmetics.FIREWORKS)
+                ticker.breaking(
+                    TickerItem(
+                        if (reward == Cosmetics.FIREWORKS) "ENCARGO CUMPLIDO · COLECCIÓN COMPLETA · FUEGOS EN TU HONOR"
+                        else "ENCARGO CUMPLIDO · NUEVO EN DISTRICT 9: ${Cosmetics.rewardName(reward)}",
+                        highlight = true,
+                    ),
+                )
+            }, delay)
         }
         lastSteps = steps
     }
@@ -266,6 +314,7 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
 
     private fun openHistory() {
         closeProfile()
+        closeStyles()
         history.setData(repo.history(7), repo.goal, repo.streak())
         history.show()
         syncBackCallback()
@@ -280,6 +329,7 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
 
     private fun openProfile() {
         closeHistory()
+        closeStyles()
         profile.setData(repo.heightCm, repo.weightKg, repo.strideMeters, repo.kcalPerStep)
         profile.show()
         syncBackCallback()
@@ -290,8 +340,30 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
         syncBackCallback()
     }
 
+    private fun openStyles() {
+        closeHistory()
+        closeProfile()
+        updateStyles()
+        styles.show()
+        syncBackCallback()
+    }
+
+    private fun closeStyles() {
+        styles.hide()
+        syncBackCallback()
+    }
+
+    private fun updateStyles() {
+        val unlocked = repo.unlockedStyles()
+        val worn = Cosmetics.Slot.entries.associateWith { repo.style(it)?.id }
+        val mission = repo.mission()
+        val next = if (repo.evaluateMission() == MissionState.DONE) Cosmetics.all.firstOrNull { it.id !in unlocked }?.id else mission.reward
+        styles.setData(unlocked, worn, next)
+    }
+
     /** Back closes whichever modal is open; with none open it's the system's again. */
     private fun closeModal(): Boolean = when {
+        styles.isOpen -> { closeStyles(); true }
         profile.isOpen -> { closeProfile(); true }
         history.isOpen -> { closeHistory(); true }
         else -> false
@@ -299,7 +371,7 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
 
     private fun syncBackCallback() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
-        val anyOpen = profile.isOpen || history.isOpen
+        val anyOpen = profile.isOpen || history.isOpen || styles.isOpen
         if (anyOpen && backCallback == null) {
             val cb = OnBackInvokedCallback { closeModal() }
             onBackInvokedDispatcher.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT, cb)
@@ -329,6 +401,16 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
                 add(TickerItem("META CUMPLIDA · LA TORRE 61 SE ENCIENDE EN TU HONOR", highlight = true))
                 add(TickerItem("FUEGOS ARTIFICIALES SOBRE DISTRICT 9 HASTA MEDIANOCHE"))
             }
+            val mission = repo.mission()
+            val reward = Cosmetics.rewardName(mission.reward)
+            add(
+                when (repo.evaluateMission()) {
+                    MissionState.ACTIVE -> TickerItem("ENCARGO DEL DÍA: ${mission.title} · RECOMPENSA: $reward", highlight = true)
+                    MissionState.DONE -> TickerItem("ENCARGO CUMPLIDO · $reward YA ES TUYO", highlight = true)
+                    MissionState.FAILED -> TickerItem("ENCARGO FALLIDO · MAÑANA LLEGA OTRO DEL NEWSWIRE")
+                },
+            )
+            add(TickerItem(timeOfDayHeadline(CityClock.now().hour)))
             add(TickerItem("DESLIZA EL DEDO PARA RECORRER EL DISTRITO", highlight = true))
             if (repo.heightCm == 0 || repo.weightKg == 0) {
                 add(TickerItem("TOCA EL PANEL DE DATOS PARA AJUSTAR TU ALTURA Y PESO", highlight = true))
@@ -368,6 +450,16 @@ class MainActivity : Activity(), StepRepository.Listener, SensorEventListener {
             if (steps >= goal) add(TickerItem("RAMEN GRATIS EN ICHIRAKU PARA QUIEN LLEGA A LA META", highlight = true))
             add(TickerItem("RAMEN 24H EN EL PUESTO 3"))
         }
+    }
+
+    private fun timeOfDayHeadline(hour: Int): String = when (hour) {
+        in 2..4 -> "DISTRICT 9 DUERME · SOLO LOS TAXIS AÉREOS SIGUEN VOLANDO"
+        in 5..6 -> "AMANECE SOBRE DISTRICT 9 · EL NEÓN SE APAGA POCO A POCO"
+        in 7..9 -> "HORA PUNTA EN LAS AUTOVÍAS AÉREAS · RETENCIONES EN EL CARRIL ALTO"
+        in 10..16 -> "DÍA GRIS EN DISTRICT 9 · EL SMOG NO DEJA VER EL SOL"
+        in 17..19 -> "HORA PUNTA DE TARDE · LAS AUTOVÍAS AÉREAS, A REVENTAR"
+        in 20..22 -> "CAE LA NOCHE · EL MERCADO NOCTURNO ENCIENDE SUS PUESTOS"
+        else -> "MEDIANOCHE EN EL DISTRITO · EL KOI NO DUERME"
     }
 
     // --- Permissions -------------------------------------------------------------------------

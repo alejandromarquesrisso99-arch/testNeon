@@ -40,6 +40,7 @@ class AmbientSynth(private val rate: Int = 22_050) {
     fun powerDown() = add(PowerDown())
     fun chime() = add(Chime())
     fun ding() = add(Ding())
+    fun flyby() = add(FlyBy())
 
     private fun add(v: Voice) {
         // Never let a burst of events pile up voices without bound.
@@ -233,6 +234,23 @@ class AmbientSynth(private val rate: Int = 22_050) {
             fun bell(on: Float, level: Float) = if (on < 0f) 0f else
                 (sin(2f * PI.toFloat() * 1760f * on) + 0.5f * sin(2f * PI.toFloat() * 2637f * on)) * exp(-on * 2.2f) * level
             return (bell(sec, 1f) + bell(sec - 0.2f, 0.55f)) * 0.15f
+        }
+    }
+
+    /** A car swishing past on the near skyway: swelling whoosh, hum dropping in pitch. */
+    private inner class FlyBy : Voice() {
+        override val length = 2.2f
+        private val n = Noise(919)
+        private var lp = 0f
+        private var phase = 0f
+
+        override fun sample(sec: Float): Float {
+            val u = sec / length
+            val near = exp(-((u - 0.45f) * (u - 0.45f)) / 0.03f) // loudest as it passes
+            lp += (0.04f + 0.25f * near) * (n.next() - lp)
+            val f = 112f + 38f / (1f + exp((u - 0.45f) * 14f)) // Doppler drop
+            phase += 2f * PI.toFloat() * f / rate
+            return (lp * 0.55f + sin(phase) * 0.06f) * near * 0.6f
         }
     }
 

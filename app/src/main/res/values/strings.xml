@@ -55,6 +55,12 @@
     <string name="notif_channel_desc">Mantiene el contador de pasos activo en segundo plano.</string>
     <string name="notif_title">%1$s pasos</string>
     <string name="notif_text">%1$d%% de la meta · %2$s</string>
+    <string name="notif_mission_channel">Encargos diarios</string>
+    <string name="notif_mission_channel_desc">El encargo de cada día y su recompensa, y el aviso al cumplirlo.</string>
+    <string name="notif_mission_title">ENCARGO DEL DÍA</string>
+    <string name="notif_mission_text">%1$s. Recompensa: %2$s.</string>
+    <string name="notif_mission_done_title">¡ENCARGO CUMPLIDO!</string>
+    <string name="notif_mission_done_text">Recompensa desbloqueada: %1$s. Ya la llevas puesta en District 9.</string>
     <string name="notif_goal_channel">Metas cumplidas</string>
     <string name="notif_goal_channel_desc">Avisa una vez al día cuando alcanzas tu meta de pasos.</string>
     <string name="notif_goal_title">¡META CUMPLIDA!</string>
@@ -83,4 +89,32 @@
     <string name="widget_kicker_streak">NEON STEPS · RACHA %1$d</string>
 
     <string name="toast_permission_settings">Concede «Actividad física» en Ajustes para contar pasos.</string>
+
+    <!-- Daily missions -->
+    <string name="mission_kicker">ENCARGO DEL DÍA</string>
+    <string name="mission_until">HASTA LAS %1$d:00</string>
+    <string name="mission_until_midnight">HASTA MEDIANOCHE</string>
+    <string name="mission_done">CUMPLIDO</string>
+    <string name="mission_failed">FALLIDO</string>
+    <string name="mission_reward">RECOMPENSA</string>
+    <string name="mission_unlocked">DESBLOQUEADO</string>
+    <string name="mission_hint_active">TOCA PARA VER TU COLECCIÓN</string>
+    <string name="mission_hint_done">YA LO LLEVAS PUESTO · TOCA PARA CAMBIARLO</string>
+    <string name="mission_hint_done_fireworks">COLECCIÓN COMPLETA · FUEGOS EN TU HONOR</string>
+    <string name="mission_hint_failed">MAÑANA OTRO ENCARGO · EL PREMIO TE ESPERA</string>
+    <string name="cd_mission_active">Encargo del día: %1$s. Progreso: %2$s. Recompensa: %3$s.</string>
+    <string name="cd_mission_done">Encargo cumplido: %1$s (%2$s). Recompensa desbloqueada: %3$s.</string>
+    <string name="cd_mission_failed">Encargo fallido: %1$s (%2$s). La recompensa, %3$s, sigue esperando.</string>
+    <string name="cd_mission_action">Toca para ver tu colección de estilos.</string>
+    <string name="style_title">COLECCIÓN · ESTILOS</string>
+    <string name="style_rain">LLUVIA</string>
+    <string name="style_koi">KOI</string>
+    <string name="style_sky">CIELO</string>
+    <string name="style_classic">ORIGINAL</string>
+    <string name="style_count">%1$d/%2$d DESBLOQUEADOS</string>
+    <string name="style_hint">CUMPLE ENCARGOS PARA CONSEGUIR MÁS</string>
+    <string name="style_complete">COLECCIÓN COMPLETA</string>
+    <string name="cd_style_prev">Estilo anterior: %1$s</string>
+    <string name="cd_style_next">Estilo siguiente: %1$s</string>
+    <string name="cd_styles">Colección de estilos: %1$d de %2$d desbloqueados. %3$s. Toca fuera del panel para cerrarlo.</string>
 </resources>

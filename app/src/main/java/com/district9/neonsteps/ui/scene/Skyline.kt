@@ -31,15 +31,21 @@ internal class SkyLayer(
     private val nextToggle: FloatArray,
     private val litAlpha: Float,
     private val rng: Rng,
+    private val litChance: Float,
 ) {
     private val paint = Paint()
     private val count = lit.size
 
-    fun update(t: Float) {
+    /**
+     * Windows switch over time toward the share of lit rooms the hour calls for
+     * ([occupancy] 0.65 ≈ the classic evening look).
+     */
+    fun update(t: Float, occupancy: Float) {
+        val target = (litChance * occupancy / 0.65f).coerceIn(0.03f, 0.9f)
         for (i in 0 until count) {
             if (t >= nextToggle[i]) {
-                lit[i] = !lit[i]
-                nextToggle[i] = t + if (lit[i]) rng.range(8f, 70f) else rng.range(4f, 45f)
+                lit[i] = rng.chance(target)
+                nextToggle[i] = t + rng.range(5f, 55f)
             }
         }
     }
@@ -77,7 +83,14 @@ internal class SkyLayer(
  * @param maxShift the largest camera offset (px at parallax 1); each layer is generated wide
  *   enough that panning never reveals its edge.
  */
-internal class Skyline(private val frame: SceneFrame, private val maxShift: Float, monoBold: Typeface) {
+internal class Skyline(
+    private val frame: SceneFrame,
+    private val maxShift: Float,
+    monoBold: Typeface,
+    initialOccupancy: Float = 0.65f,
+) {
+    /** Share of lit windows the hour calls for; see [SkyLayer.update]. */
+    var occupancy = initialOccupancy
     val layers: List<SkyLayer>
     val beacons = mutableListOf<Beacon>()
 
@@ -309,16 +322,16 @@ internal class Skyline(private val frame: SceneFrame, private val maxShift: Floa
         c.drawRect(left, top, left + bmpW, frame.horizon, haze)
 
         val n = winColors.size
-        val lit = BooleanArray(n) { rng.chance(spec.litChance) }
+        val lit = BooleanArray(n) { rng.chance((spec.litChance * occupancy / 0.65f).coerceIn(0.03f, 0.9f)) }
         val next = FloatArray(n) { rng.range(0f, 50f) }
         return SkyLayer(
             spec.parallax, bitmap, left, top,
-            winRects.toFloatArray(), winColors.toIntArray(), lit, next, spec.litAlpha, rng,
+            winRects.toFloatArray(), winColors.toIntArray(), lit, next, spec.litAlpha, rng, spec.litChance,
         )
     }
 
     fun update(t: Float) {
-        for (layer in layers) layer.update(t)
+        for (layer in layers) layer.update(t, occupancy)
     }
 
     fun drawLayer(canvas: Canvas, index: Int, dx: Float, blackoutT: Float = -1f) = layers[index].draw(canvas, dx, blackoutT)

@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.os.Handler
 import android.os.Looper
+import com.district9.neonsteps.util.CityClock
 import java.time.LocalDate
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -27,6 +28,7 @@ class StepRepository internal constructor(
     private val prefs: SharedPreferences,
     private val clock: () -> Long = System::currentTimeMillis,
     private val today: () -> LocalDate = LocalDate::now,
+    private val hourNow: () -> Int = { CityClock.now().hour },
 ) {
     private val listeners = CopyOnWriteArrayList<Listener>()
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -37,6 +39,10 @@ class StepRepository internal constructor(
     private var lastCounter: Long = prefs.getLong(KEY_LAST_COUNTER, -1L)
     private var lastBoot: Int = prefs.getInt(KEY_LAST_BOOT, -1)
     private var dirty = false
+
+    /** Seconds walked today at a good pace (≥ [BRISK_CADENCE] steps/min), for brisk-walk missions. */
+    private var briskSeconds = prefs.getFloat(briskKey(day), 0f)
+    private var lastStepAt = 0L
 
     /** Recent step increments, used for live cadence (steps / minute). */
     private val recentTimes = LongArray(CADENCE_SAMPLES)
@@ -146,6 +152,11 @@ class StepRepository internal constructor(
         rollOverIfNeeded()
         stepsToday += count
         recordCadenceSample(count)
+        val now = clock()
+        if (lastStepAt > 0L && cadence() >= BRISK_CADENCE) {
+            briskSeconds += ((now - lastStepAt) / 1000f).coerceAtMost(10f)
+        }
+        lastStepAt = now
         dirty = true
         schedulePersist()
         notifyListeners()
@@ -202,6 +213,111 @@ class StepRepository internal constructor(
         notifyListeners()
     }
 
+    // --- Daily missions --------------------------------------------------------------------
+
+    /** Today's mission, generated (and remembered) on first ask. */
+    fun mission(): Mission {
+        rollOverIfNeeded()
+        if (prefs.getString(KEY_MISSION_DAY, null) == day.toString()) {
+            runCatching {
+                return Mission(
+                    day,
+                    MissionKind.valueOf(prefs.getString(KEY_MISSION_KIND, null)!!),
+                    prefs.getInt(KEY_MISSION_TARGET, 0),
+                    prefs.getInt(KEY_MISSION_DEADLINE, 24),
+                    prefs.getString(KEY_MISSION_REWARD, null)!!,
+                )
+            }
+        }
+        val m = generateMission(day)
+        prefs.edit()
+            .putString(KEY_MISSION_DAY, day.toString())
+            .putString(KEY_MISSION_KIND, m.kind.name)
+            .putInt(KEY_MISSION_TARGET, m.target)
+            .putInt(KEY_MISSION_DEADLINE, m.deadlineHour)
+            .putString(KEY_MISSION_REWARD, m.reward)
+            .putString(KEY_MISSION_STATE, MissionState.ACTIVE.name)
+            .apply()
+        return m
+    }
+
+    /** Different every day (never the same kind twice running), sized to the user's goal and yesterday. */
+    private fun generateMission(d: LocalDate): Mission {
+        val rnd = java.util.Random(d.toEpochDay() * 7919 + 61)
+        val yesterday = prefs.getInt(dayKey(d.minusDays(1)), 0)
+        val lastKind = prefs.getString(KEY_MISSION_KIND, null)
+        val kinds = MissionKind.entries.filter { k ->
+            k.name != lastKind && !(k == MissionKind.BEAT_YESTERDAY && yesterday < 2_000)
+        }
+        val kind = kinds[rnd.nextInt(kinds.size)]
+        val g = goal
+        fun round500(x: Double) = (Math.round(x / 500.0) * 500).toInt().coerceAtLeast(500)
+        val (target, deadline) = when (kind) {
+            MissionKind.STEPS_BY_HOUR -> round500(g * 0.5) to 14
+            MissionKind.MORNING_STEPS -> 1_500 to 10
+            MissionKind.BEAT_YESTERDAY -> yesterday + 1 to 24
+            MissionKind.BRISK_MINUTES -> 15 to 24
+            MissionKind.DISTANCE -> (Math.round(g * strideMeters * 0.9 / 500.0) * 500).toInt().coerceAtLeast(1_000) to 24
+            MissionKind.GOAL_BY_HOUR -> g to 20
+            MissionKind.STRETCH -> round500(g * 1.25) to 24
+        }
+        val unlocked = unlockedStyles()
+        val reward = Cosmetics.all.firstOrNull { it.id !in unlocked }?.id ?: Cosmetics.FIREWORKS
+        return Mission(d, kind, target, deadline, reward)
+    }
+
+    /** Progress toward [m], in its own units (steps, minutes or metres). */
+    fun missionProgress(m: Mission): Int = when (m.kind) {
+        MissionKind.BRISK_MINUTES -> (briskSeconds / 60f).toInt()
+        MissionKind.DISTANCE -> (stepsToday * strideMeters).toInt()
+        else -> stepsToday
+    }
+
+    /**
+     * Settles today's mission: done once the target is reached (unlocking and wearing its
+     * reward), failed once its deadline passes. Safe to call often, from anywhere.
+     */
+    fun evaluateMission(): MissionState {
+        val m = mission()
+        val stored = runCatching { MissionState.valueOf(prefs.getString(KEY_MISSION_STATE, null)!!) }.getOrDefault(MissionState.ACTIVE)
+        if (stored != MissionState.ACTIVE) return stored
+        val state = when {
+            missionProgress(m) >= m.target -> MissionState.DONE
+            hourNow() >= m.deadlineHour -> MissionState.FAILED
+            else -> MissionState.ACTIVE
+        }
+        if (state != MissionState.ACTIVE) {
+            val edit = prefs.edit().putString(KEY_MISSION_STATE, state.name)
+            val item = Cosmetics.byId(m.reward)
+            if (state == MissionState.DONE && item != null) {
+                edit.putStringSet(KEY_UNLOCKED, unlockedStyles() + item.id).putString(styleKey(item.slot), item.id)
+            }
+            edit.apply()
+            notifyListeners()
+        }
+        return state
+    }
+
+    fun missionAnnounced(): Boolean = prefs.getString(KEY_MISSION_ANNOUNCED, null) == today().toString()
+    fun markMissionAnnounced() = prefs.edit().putString(KEY_MISSION_ANNOUNCED, today().toString()).apply()
+    fun missionDoneNotified(): Boolean = prefs.getString(KEY_MISSION_NOTIFIED, null) == today().toString()
+    fun markMissionDoneNotified() = prefs.edit().putString(KEY_MISSION_NOTIFIED, today().toString()).apply()
+    fun missionCelebrated(): Boolean = prefs.getString(KEY_MISSION_CELEBRATED, null) == today().toString()
+    fun markMissionCelebrated() = prefs.edit().putString(KEY_MISSION_CELEBRATED, today().toString()).apply()
+
+    // --- Styles (mission rewards) -----------------------------------------------------------
+
+    fun unlockedStyles(): Set<String> = prefs.getStringSet(KEY_UNLOCKED, null)?.toSet() ?: emptySet()
+
+    /** The style worn in [slot], or null for the classic look. */
+    fun style(slot: Cosmetics.Slot): Cosmetics.Item? =
+        prefs.getString(styleKey(slot), null)?.takeIf { it in unlockedStyles() }?.let(Cosmetics::byId)
+
+    fun setStyle(slot: Cosmetics.Slot, id: String?) {
+        prefs.edit().putString(styleKey(slot), id).apply()
+        notifyListeners()
+    }
+
     /** The last [days] days, oldest first, ending with today. */
     fun history(days: Int): List<DayEntry> {
         rollOverIfNeeded()
@@ -255,6 +371,8 @@ class StepRepository internal constructor(
             persist()
             day = now
             stepsToday = prefs.getInt(dayKey(now), 0)
+            briskSeconds = prefs.getFloat(briskKey(now), 0f)
+            lastStepAt = 0L
             recentCount = 0
             pruneOldDays(now)
             notifyListeners()
@@ -281,6 +399,7 @@ class StepRepository internal constructor(
         prefs.edit()
             .putInt(dayKey(day), stepsToday)
             .putInt(goalKey(day), goal)
+            .putFloat(briskKey(day), briskSeconds)
             .putLong(KEY_LAST_COUNTER, lastCounter)
             .putInt(KEY_LAST_BOOT, lastBoot)
             .apply()
@@ -292,6 +411,7 @@ class StepRepository internal constructor(
             val prefix = when {
                 key.startsWith(DAY_PREFIX) -> DAY_PREFIX
                 key.startsWith(GOAL_PREFIX) -> GOAL_PREFIX
+                key.startsWith(BRISK_PREFIX) -> BRISK_PREFIX
                 else -> return@filter false
             }
             runCatching { LocalDate.parse(key.removePrefix(prefix)) }.getOrNull()?.isBefore(cutoff) == true
@@ -328,6 +448,18 @@ class StepRepository internal constructor(
         private const val KEY_WEIGHT = "weight_kg"
         private const val KEY_SOUND = "sound_on"
         private const val GOAL_PREFIX = "daygoal_"
+        private const val BRISK_PREFIX = "brisk_"
+        private const val KEY_MISSION_DAY = "mission_day"
+        private const val KEY_MISSION_KIND = "mission_kind"
+        private const val KEY_MISSION_TARGET = "mission_target"
+        private const val KEY_MISSION_DEADLINE = "mission_deadline"
+        private const val KEY_MISSION_REWARD = "mission_reward"
+        private const val KEY_MISSION_STATE = "mission_state"
+        private const val KEY_MISSION_ANNOUNCED = "mission_announced_on"
+        private const val KEY_MISSION_NOTIFIED = "mission_notified_on"
+        private const val KEY_MISSION_CELEBRATED = "mission_celebrated_on"
+        private const val KEY_UNLOCKED = "styles_unlocked"
+        private const val BRISK_CADENCE = 100
         private const val KEEP_DAYS = 60
         private const val PERSIST_DELAY_MS = 3_000L
         private const val CADENCE_SAMPLES = 128
@@ -336,6 +468,8 @@ class StepRepository internal constructor(
 
         private fun dayKey(date: LocalDate) = DAY_PREFIX + date
         private fun goalKey(date: LocalDate) = GOAL_PREFIX + date
+        private fun briskKey(date: LocalDate) = BRISK_PREFIX + date
+        private fun styleKey(slot: Cosmetics.Slot) = "style_" + slot.name.lowercase()
 
         @Volatile
         private var instance: StepRepository? = null

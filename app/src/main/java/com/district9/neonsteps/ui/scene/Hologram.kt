@@ -94,6 +94,11 @@ internal class Hologram(
     private val broth = Paint(Paint.ANTI_ALIAS_FLAG)
     private val oval = RectF()
 
+    // The koi's colours: cyan by default, or an unlocked style.
+    var koiMain = Neon.CYAN
+    var koiChroma = Neon.MAGENTA
+    var koiCore = 0xFFE6FDFF.toInt()
+
     /** Streak perk: a smaller magenta koi that shares the beam. */
     var companion = false
     private var k2x = beamX(2.6f)
@@ -384,9 +389,9 @@ internal class Hologram(
         val squash = (0.16f + 0.84f * abs(facing).pow(0.3f)) * if (facing >= 0f) 1f else -1f
         buildWireframe(x, ky, squash, length)
 
-        val main = Neon.mix(Neon.CYAN, GOLD, gold)
-        val chroma = Neon.mix(Neon.MAGENTA, 0xFFFF7A2E.toInt(), gold)
-        val core = Neon.mix(0xFFE6FDFF.toInt(), 0xFFFFF6DC.toInt(), gold)
+        val main = Neon.mix(koiMain, GOLD, gold)
+        val chroma = Neon.mix(koiChroma, 0xFFFF7A2E.toInt(), gold)
+        val core = Neon.mix(koiCore, 0xFFFFF6DC.toInt(), gold)
         drawLines(canvas, frame.s(6f), Neon.alpha(main, (0.10f + 0.12f * gold) * f), 0f, 0f)
         drawLines(canvas, frame.s(1.8f), Neon.alpha(chroma, 0.65f * f), frame.s(3.5f), frame.s(1.5f))
         drawLines(canvas, frame.s(1.8f), Neon.alpha(main, 0.9f * f), -frame.s(2f), 0f)

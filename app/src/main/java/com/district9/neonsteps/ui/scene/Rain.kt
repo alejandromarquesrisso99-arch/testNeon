@@ -3,6 +3,7 @@ package com.district9.neonsteps.ui.scene
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
+import com.district9.neonsteps.ui.Neon
 import kotlin.math.pow
 
 /**
@@ -78,6 +79,14 @@ internal class Rain(private val frame: SceneFrame) {
 
     /** 0..1, eased toward from the UI's rain mode. */
     var intensity = 0.7f
+
+    /** Colour of the drops and their splashes (an unlockable style). */
+    var color = DEFAULT_COLOR
+        set(value) {
+            field = value
+            for ((k, p) in paints.withIndex()) p.color = Neon.alpha(value, depths[k].alpha / 255f)
+            ringPaint.color = Neon.mix(value, 0xFFFFFFFF.toInt(), 0.1f)
+        }
 
     init {
         for (d in depths) for (i in 0 until d.max) respawn(d, i, initial = true)
@@ -171,7 +180,8 @@ internal class Rain(private val frame: SceneFrame) {
         }
     }
 
-    private companion object {
-        const val SPRAY_LIFE = 0.35f
+    companion object {
+        private const val SPRAY_LIFE = 0.35f
+        const val DEFAULT_COLOR = 0xFFD2C4FF.toInt()
     }
 }

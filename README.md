@@ -35,6 +35,20 @@ compilada en otro ordenador, desinstala antes la anterior.
 - **Rachas**: días seguidos cumpliendo la meta. District 9 crece con ellas y conserva lo ganado
   mientras dure la racha: letrero «ファイト» (2 días), puesto de dango (3), farolillos (5), un
   segundo koi (7), un dirigible con tu racha (14) y, a los 30, la «L» del HOTEL arreglada para siempre.
+- **Encargo del día**: cada día el noticiero te da un encargo distinto (llegar a X pasos antes
+  de una hora, superar los pasos de ayer, caminar 15 minutos a buen ritmo, recorrer X km...),
+  ajustado a tu meta. Aparece en una tarjeta sobre el HUD con el progreso y la recompensa, y
+  llega como notificación a partir de las 7:00 (y otra cuando lo cumples).
+- **Colección de estilos**: cada encargo cumplido desbloquea una recompensa para District 9 y
+  se pone al momento: lluvia cian, rosa o dorada, koi sakura, esmeralda o sombra, luna llena o
+  una aurora sobre la ciudad. Toca la tarjeta del encargo para ver la colección y cambiar de
+  estilo; con la colección completa, los encargos se pagan en fuegos artificiales.
+- **Hora real**: el cielo sigue la hora local. Amanece de madrugada, de día el smog se vuelve
+  gris y los neones pierden fuerza, atardece en naranja y violeta, y de noche se apagan
+  ventanas a medida que el distrito se va a dormir.
+- **Tráfico aéreo**: coches voladores en tres carriles a distinta profundidad, con faros que
+  cortan la lluvia y estelas de luz. Hay atascos en hora punta y apenas pasan de madrugada;
+  con el sonido activado se oyen pasar los más cercanos.
 - **Widget** para la pantalla de inicio con tus pasos en neón; la Torre 61 se enciende y hay
   fuegos artificiales al cumplir la meta.
 - **Desliza el dedo** de lado a lado para recorrer la calle: cada capa de edificios se mueve a
@@ -101,10 +115,11 @@ compila la APK en cada push (artefacto `neon-steps-apk`).
 
 | Ruta | Contenido |
 |---|---|
-| `data/StepRepository.kt` | Pasos por día, cambio de día, reinicios del sensor, ritmo |
+| `data/StepRepository.kt` | Pasos por día, cambio de día, reinicios del sensor, ritmo, encargos y estilos |
+| `data/Missions.kt` | Tipos de encargo y catálogo de estilos desbloqueables |
 | `service/StepCounterService.kt` | Servicio en primer plano que mantiene el sensor activo |
-| `ui/scene/` | La calle: skyline en paralaje, letreros de neón, koi, mercado, lluvia, reflejo mojado |
-| `ui/hud/` | Cabecera, HUD, botones, historial y noticiero |
+| `ui/scene/` | La calle: skyline en paralaje, ciclo de día, tráfico aéreo, letreros de neón, koi, mercado, lluvia, reflejo mojado |
+| `ui/hud/` | Cabecera, HUD, tarjeta del encargo, colección, botones, historial y noticiero |
 
 ## Créditos
 

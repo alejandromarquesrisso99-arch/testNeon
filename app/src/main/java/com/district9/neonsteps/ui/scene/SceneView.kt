@@ -44,6 +44,7 @@ class SceneView @JvmOverloads constructor(
     private var pendingStrike = 0f
     private var celebrating = false
     private var pendingCelebration = false
+    private var pendingMission = 0 // 1 a mission salvo, 2 a double one
     private var hotelFixed = false
 
     /** Told when the user finds an easter egg. */
@@ -122,6 +123,31 @@ class SceneView @JvmOverloads constructor(
 
     private var streak = 0
     private var audio: SceneAudio? = null
+    private var hour = 22f
+    private var style: (CityScene) -> Unit = {}
+
+    /** Local time as a fractional hour (e.g. 19.5 = 19:30); the city follows it. */
+    fun setHour(value: Float) {
+        hour = value
+        scene?.hour = value
+    }
+
+    private var styleKey: List<Any?>? = null
+
+    /** Unlocked styles to show: rain colour, koi colours (main, chroma, core) or null, sky extras. */
+    fun setStyle(rainColor: Int, koi: IntArray?, aurora: Boolean, moon: Boolean) {
+        val key = listOf(rainColor, koi?.toList(), aurora, moon)
+        if (key == styleKey) return
+        styleKey = key
+        style = { it.setStyle(rainColor, koi, aurora, moon) }
+        scene?.let(style)
+    }
+
+    /** A mission done: chime and fireworks salvo (a double one if fireworks were the reward). */
+    fun missionComplete(big: Boolean) {
+        val s = scene
+        if (s == null) pendingMission = if (big) 2 else 1 else s.missionComplete(big)
+    }
 
     fun setAudio(value: SceneAudio?) {
         audio = value
@@ -184,7 +210,8 @@ class SceneView @JvmOverloads constructor(
         val h = height
         if (w <= 0 || h <= 0) return null
         val horizon = if (streetLimit > 0f) (streetLimit - h * 0.075f).coerceIn(h * 0.52f, h * 0.72f) else h * 0.705f
-        return CityScene(fonts, w, h, horizon).also { s ->
+        return CityScene(fonts, w, h, horizon, hour).also { s ->
+            style(s)
             s.setRainIntensity(rain)
             tilt?.let(s::setTilt)
             s.activity = activity
@@ -199,6 +226,10 @@ class SceneView @JvmOverloads constructor(
             if (pendingStrike > 0f) {
                 s.strike(pendingStrike)
                 pendingStrike = 0f
+            }
+            if (pendingMission > 0) {
+                s.missionComplete(pendingMission == 2)
+                pendingMission = 0
             }
             scene = s
         }
@@ -326,18 +357,21 @@ class SceneView @JvmOverloads constructor(
     /** Current easter-egg hit boxes, for tests: the HOTEL's "L" and the koi. */
     internal fun eggTargets(): EggTargets? = scene?.debugTargets()
 
-    private companion object {
-        const val LONG_PRESS_MS = 650L
+    companion object {
+        /** The rain's colour with no style unlocked. */
+        const val CLASSIC_RAIN = Rain.DEFAULT_COLOR
+
+        private const val LONG_PRESS_MS = 650L
 
         // Waveform segments (ms) and their strength (0–255): thunk, gap, sputter, gap, sputter, gap, hum.
-        val BLACKOUT_TIMINGS = longArrayOf(0, 90, 120, 40, 90, 45, 150, 265)
-        val BLACKOUT_AMPLITUDES = intArrayOf(0, 255, 0, 150, 0, 110, 0, 55)
+        private val BLACKOUT_TIMINGS = longArrayOf(0, 90, 120, 40, 90, 45, 150, 265)
+        private val BLACKOUT_AMPLITUDES = intArrayOf(0, 255, 0, 150, 0, 110, 0, 55)
 
         // Kage Bunshin: silence while the ninja dashes out, a big poof, then a patter of small
         // poofs as the clones appear (in step with NinjaSquad's timeline).
-        val POOF_TIMINGS = longArrayOf(0, 1600, 70, 50) + LongArray(18) { if (it % 2 == 0) 25L else 95L }
-        val POOF_AMPLITUDES = intArrayOf(0, 0, 230, 0) + IntArray(18) { if (it % 2 == 0) 120 else 0 }
-        const val SPRING = 6f
-        val DAMPING = 2f * sqrt(SPRING)
+        private val POOF_TIMINGS = longArrayOf(0, 1600, 70, 50) + LongArray(18) { if (it % 2 == 0) 25L else 95L }
+        private val POOF_AMPLITUDES = intArrayOf(0, 0, 230, 0) + IntArray(18) { if (it % 2 == 0) 120 else 0 }
+        private const val SPRING = 6f
+        private val DAMPING = 2f * sqrt(SPRING)
     }
 }

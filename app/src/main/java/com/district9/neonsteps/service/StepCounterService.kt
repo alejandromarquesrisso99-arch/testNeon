@@ -21,8 +21,11 @@ import android.provider.Settings
 import android.util.Log
 import com.district9.neonsteps.MainActivity
 import com.district9.neonsteps.R
+import com.district9.neonsteps.data.Cosmetics
+import com.district9.neonsteps.data.MissionState
 import com.district9.neonsteps.data.SensorMode
 import com.district9.neonsteps.data.StepRepository
+import com.district9.neonsteps.util.CityClock
 import com.district9.neonsteps.util.Format
 import com.district9.neonsteps.widget.StepsWidget
 
@@ -42,6 +45,7 @@ class StepCounterService : Service(), SensorEventListener {
     private val repoListener = StepRepository.Listener {
         maybeUpdateNotification()
         maybeNotifyGoal()
+        maybeNotifyMission()
         StepsWidget.refresh(this)
     }
 
@@ -57,6 +61,7 @@ class StepCounterService : Service(), SensorEventListener {
         registerBestSensor()
         repo.addListener(repoListener)
         maybeNotifyGoal()
+        maybeNotifyMission()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -153,6 +158,40 @@ class StepCounterService : Service(), SensorEventListener {
         getSystemService(NotificationManager::class.java).notify(GOAL_NOTIFICATION_ID, notification)
     }
 
+    /**
+     * The day's mission: announced with the first steps after 7:00, and again when it's done.
+     * While the app is on screen its card says it all, so no notification then.
+     */
+    private fun maybeNotifyMission() {
+        val state = repo.evaluateMission()
+        val mission = repo.mission()
+        val reward = Cosmetics.rewardName(mission.reward)
+        val nm = getSystemService(NotificationManager::class.java)
+        if (state == MissionState.ACTIVE && !repo.missionAnnounced() && CityClock.now().hour >= 7) {
+            repo.markMissionAnnounced()
+            if (!MainActivity.isInForeground) {
+                nm.notify(MISSION_NOTIFICATION_ID, missionNotification(getString(R.string.notif_mission_title), getString(R.string.notif_mission_text, mission.title, reward)))
+            }
+        }
+        if (state == MissionState.DONE && !repo.missionDoneNotified()) {
+            repo.markMissionDoneNotified()
+            if (!MainActivity.isInForeground) {
+                nm.notify(MISSION_NOTIFICATION_ID, missionNotification(getString(R.string.notif_mission_done_title), getString(R.string.notif_mission_done_text, reward)))
+            }
+        }
+    }
+
+    private fun missionNotification(title: String, text: String): Notification =
+        Notification.Builder(this, MISSION_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_steps)
+            .setColor(0xFFFF8A1E.toInt())
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(Notification.BigTextStyle().bigText(text))
+            .setContentIntent(openAppIntent())
+            .setAutoCancel(true)
+            .build()
+
     private fun openAppIntent(): PendingIntent = PendingIntent.getActivity(
         this,
         0,
@@ -190,7 +229,12 @@ class StepCounterService : Service(), SensorEventListener {
             getString(R.string.notif_goal_channel),
             NotificationManager.IMPORTANCE_DEFAULT,
         ).apply { description = getString(R.string.notif_goal_channel_desc) }
-        getSystemService(NotificationManager::class.java).createNotificationChannels(listOf(channel, goals))
+        val missions = NotificationChannel(
+            MISSION_CHANNEL_ID,
+            getString(R.string.notif_mission_channel),
+            NotificationManager.IMPORTANCE_DEFAULT,
+        ).apply { description = getString(R.string.notif_mission_channel_desc) }
+        getSystemService(NotificationManager::class.java).createNotificationChannels(listOf(channel, goals, missions))
     }
 
     companion object {
@@ -199,6 +243,8 @@ class StepCounterService : Service(), SensorEventListener {
         private const val NOTIFICATION_ID = 61
         private const val GOAL_CHANNEL_ID = "goals"
         private const val GOAL_NOTIFICATION_ID = 62
+        private const val MISSION_CHANNEL_ID = "missions"
+        private const val MISSION_NOTIFICATION_ID = 63
         private const val NOTIFY_INTERVAL_MS = 5_000L
 
         @Volatile

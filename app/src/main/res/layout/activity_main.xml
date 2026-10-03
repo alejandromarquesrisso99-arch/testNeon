@@ -28,6 +28,14 @@
             android:layout_height="0dp"
             android:layout_weight="1" />
 
+        <com.district9.neonsteps.ui.hud.MissionCardView
+            android:id="@+id/mission"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
+            android:layout_marginBottom="10dp" />
+
         <com.district9.neonsteps.ui.hud.HudPanelView
             android:id="@+id/hud"
             android:layout_width="match_parent"
@@ -85,6 +93,11 @@
 
     <com.district9.neonsteps.ui.hud.ProfileView
         android:id="@+id/profile"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <com.district9.neonsteps.ui.hud.StyleView
+        android:id="@+id/styles"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 

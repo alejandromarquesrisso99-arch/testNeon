@@ -9,9 +9,13 @@ import com.district9.neonsteps.ui.Neon
 import com.district9.neonsteps.ui.NeonFonts
 
 /** The whole District 9 street at night, laid out for one view size. */
-internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Float) {
+internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Float, initialHour: Float = 22f) {
     val frame = SceneFrame(width, height, horizon)
     private val sprites = Sprites()
+
+    /** How the hour looks (sky, lit windows, neon strength, traffic); see [DayCycle]. */
+    private var look = DayCycle.at(initialHour)
+    private var lookHour = initialHour
 
     /** Furthest the drag can take the near layer (rubber band included), plus tilt. */
     val panRange = frame.s(200f)
@@ -19,7 +23,10 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
     private val maxShift = panRange * 1.15f + tiltRange
     private val frontMargin = maxShift * FRONT_PARALLAX + frame.s(40f)
 
-    private val skyline = Skyline(frame, maxShift, fonts.bold)
+    private val skyline = Skyline(frame, maxShift, fonts.bold, look.occupancy)
+    private val traffic = AirTraffic(frame, sprites, maxShift).apply { density = look.traffic }
+    private val skyExtras = SkyExtras(frame, sprites)
+    private val hazePaint = Paint()
     private val hologram = Hologram(frame, fonts.mono, skyline.projectorX, skyline.projectorY, sprites)
     private val market = Market(frame, sprites, frontMargin)
     private val pedestrians = Pedestrians(frame, sprites, maxShift * FRONT_PARALLAX)
@@ -96,13 +103,32 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
         fightSign,
     )
 
-    private val skyPaint = Paint().apply {
-        shader = LinearGradient(
-            0f, 0f, 0f, frame.horizon,
-            intArrayOf(0xFF07010F.toInt(), 0xFF140428.toInt(), 0xFF2A0A47.toInt(), 0xFF46104F.toInt()),
-            floatArrayOf(0f, 0.35f, 0.75f, 1f),
-            Shader.TileMode.CLAMP,
-        )
+    private val skyPaint = Paint().apply { shader = skyShader(look) }
+
+    private fun skyShader(l: DayCycle.Look) = LinearGradient(
+        0f, 0f, 0f, frame.horizon, l.sky, floatArrayOf(0f, 0.35f, 0.75f, 1f), Shader.TileMode.CLAMP,
+    )
+
+    /** The phone's local time as a fractional hour; the city follows it minute by minute. */
+    var hour: Float = initialHour
+        set(value) {
+            field = value
+            if (kotlin.math.abs(value - lookHour) < 1f / 60f) return
+            lookHour = value
+            look = DayCycle.at(value)
+            skyPaint.shader = skyShader(look)
+            skyline.occupancy = look.occupancy
+            traffic.density = look.traffic
+        }
+
+    // Unlockable styles (rewards for daily missions).
+    fun setStyle(rainColor: Int, koi: IntArray?, aurora: Boolean, moon: Boolean) {
+        rain.color = rainColor
+        hologram.koiMain = koi?.get(0) ?: Neon.CYAN
+        hologram.koiChroma = koi?.get(1) ?: Neon.MAGENTA
+        hologram.koiCore = koi?.get(2) ?: 0xFFE6FDFF.toInt()
+        skyExtras.aurora = aurora
+        skyExtras.moon = moon
     }
     private val smogX = floatArrayOf(0.1f, 0.42f, 0.8f, 0.25f, 0.65f)
     private val smogY = floatArrayOf(520f, 380f, 600f, 860f, 820f)
@@ -270,9 +296,19 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
         fireworks.salvo()
     }
 
+    private var secondSalvoAt = -1f
+
+    /** A mission completed: a chime and a salvo; a second one when the reward is the fireworks. */
+    fun missionComplete(big: Boolean) {
+        audio?.chime()
+        fireworks.salvo()
+        if (big) secondSalvoAt = time + 1.4f
+    }
+
     init {
         bakeReflection()
         fireworks.onBurst = { audio?.firework(it) }
+        traffic.onNearPass = { audio?.flyby() }
         ninjas.onPoof = { audio?.poof(it) }
     }
 
@@ -310,14 +346,15 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
         ichiraku.visible = showIchiraku
         ramenSign.visible = !showIchiraku
         for ((i, s) in signs.withIndex()) {
-            // Signs restart in a staggered order after a blackout.
-            s.powerScale = Blackout.power(blackoutT, 0.15f + 0.55f * i / signs.size)
+            // Signs restart in a staggered order after a blackout, and read weaker by day.
+            s.powerScale = Blackout.power(blackoutT, 0.15f + 0.55f * i / signs.size) * (0.55f + 0.45f * look.neon)
             s.update(t)
         }
         signSparks.update(dt)
         hologram.update(t, dt, activity)
         hologram.updateHitBox(layerDx[2])
         market.update(dt)
+        traffic.update(dt)
         pedestrians.update(dt, frame.width)
         ninjas.update(dt)
         if (lanternsOn) lanterns.update(dt)
@@ -328,6 +365,10 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
         if (secondStrikeAt in 0f..t) {
             strike(0.8f)
             secondStrikeAt = -1f
+        }
+        if (secondSalvoAt in 0f..t) {
+            fireworks.salvo()
+            secondSalvoAt = -1f
         }
         // Tower 61 powers on floor by floor, and dims faster if the goal is raised past you.
         towerLevel = if (celebrating) (towerLevel + dt * 0.55f).coerceAtMost(1f) else (towerLevel - dt * 1.5f).coerceAtLeast(0f)
@@ -346,21 +387,31 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
         val front = camera * FRONT_PARALLAX
 
         canvas.drawRect(0f, 0f, w, frame.horizon, skyPaint)
+        skyExtras.draw(canvas, t, camera * 0.03f, look.daylight)
+        val day = look.daylight
         for (i in smogX.indices) {
             val span = w + frame.s(600f)
             val x = ((smogX[i] * w + smogSpeed[i] * frame.s(1f) * t + camera * 0.05f) % span + span) % span - frame.s(300f)
-            sprites.drawBlob(canvas, x, frame.y(smogY[i]), frame.s(smogR[i]), frame.s(smogR[i] * 0.45f), smogC[i], 0.42f)
+            // By day the smog takes the colour of the sky.
+            val c = Neon.mix(smogC[i], look.sky[2], day * 0.7f)
+            sprites.drawBlob(canvas, x, frame.y(smogY[i]), frame.s(smogR[i]), frame.s(smogR[i] * 0.45f), c, 0.42f * (1f - 0.35f * day))
         }
-        // The city's own glow on the smog goes out with the grid.
+        // The city's own glow on the smog goes out with the grid, and fades by day.
         val cityGlow = Blackout.power(blackoutT, 0.4f)
-        sprites.drawBlob(canvas, w / 2f, frame.y(1180f), w * 0.85f, frame.s(300f), 0xFF8A1A70.toInt(), 0.32f * (0.35f + 0.65f * cityGlow))
+        sprites.drawBlob(canvas, w / 2f, frame.y(1180f), w * 0.85f, frame.s(300f), 0xFF8A1A70.toInt(), 0.32f * (0.35f + 0.65f * cityGlow) * (1f - 0.6f * day))
         if (fireworks.hasSomethingToDraw) fireworks.draw(canvas, camera * 0.06f)
         lightning.drawSky(canvas)
 
         val b = blackoutT
         val late = Blackout.power(b, 0.95f) // Tower 61 and its projector come back last
         skyline.drawLayer(canvas, 0, layerDx[0], b)
+        traffic.drawLane(canvas, 0, camera)
         skyline.drawLayer(canvas, 1, layerDx[1], b)
+        if (day > 0.01f) {
+            // Daytime haze softens the distant towers.
+            hazePaint.color = Neon.alpha(look.sky[2], 0.28f * day)
+            canvas.drawRect(0f, frame.y(300f), w, frame.horizon, hazePaint)
+        }
         skyline.drawLayer(canvas, 2, layerDx[2], b)
         skyline.drawTowerLights(canvas, sprites, t, layerDx[2], towerLevel * late)
         skyline.drawTowerLabel(canvas, t, layerDx[2], towerLevel, late)
@@ -370,6 +421,7 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
         val koiInFront = hologram.freedom > 0.5f
         if (!koiInFront) hologram.drawKoi(canvas, t, layerDx[2], late)
         if (airshipOn) airship.draw(canvas, camera * 0.25f)
+        traffic.drawLane(canvas, 1, camera)
         skyline.drawLayer(canvas, 3, near, b)
         skyline.drawBeacons(canvas, sprites, t, layerDx, Blackout.power(b, 0.85f))
 
@@ -377,6 +429,7 @@ internal class CityScene(fonts: NeonFonts, width: Int, height: Int, horizon: Flo
         for (s in signs) s.draw(canvas, near)
         signSparks.draw(canvas, near)
         if (lanternsOn) lanterns.draw(canvas, near)
+        traffic.drawLane(canvas, 2, camera)
         if (koiInFront) hologram.drawKoi(canvas, t, layerDx[2], late)
 
         street.drawGround(canvas)

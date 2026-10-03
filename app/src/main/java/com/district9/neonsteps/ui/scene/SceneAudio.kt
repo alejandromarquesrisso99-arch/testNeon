@@ -11,4 +11,5 @@ interface SceneAudio {
     fun powerDown()
     fun chime()
     fun ding()
+    fun flyby()
 }

@@ -5,9 +5,10 @@ cyberpunk renderizada en vivo, con lluvia, neones que fallan y un koi holográfi
 del día como título en neón.
 
 <p>
-  <img src="docs/main.jpg" width="270" alt="Pantalla principal">
-  <img src="docs/history.jpg" width="270" alt="Historial de 7 días">
-  <img src="docs/goal.jpg" width="270" alt="Meta cumplida: Torre 61 encendida y fuegos artificiales">
+  <img src="docs/main.jpg" width="200" alt="Pantalla principal con el encargo del día">
+  <img src="docs/mission.jpg" width="200" alt="Encargo cumplido: aurora sobre District 9">
+  <img src="docs/styles.jpg" width="200" alt="Colección de estilos">
+  <img src="docs/goal.jpg" width="200" alt="Meta cumplida: Torre 61 encendida y fuegos artificiales">
 </p>
 
 ## Instalar

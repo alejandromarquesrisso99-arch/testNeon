@@ -116,5 +116,5 @@
     <string name="style_complete">COLECCIÓN COMPLETA</string>
     <string name="cd_style_prev">Estilo anterior: %1$s</string>
     <string name="cd_style_next">Estilo siguiente: %1$s</string>
-    <string name="cd_styles">Colección de estilos: %1$d de %2$d desbloqueados. %3$s. Toca fuera del panel para cerrarlo.</string>
+    <string name="cd_styles">Colección de estilos. Desbloqueados: %1$d de %2$d. %3$s. Toca fuera del panel para cerrarlo.</string>
 </resources>
